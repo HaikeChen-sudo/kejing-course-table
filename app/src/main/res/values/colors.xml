@@ -1,0 +1,8 @@
+<resources>
+    <color name="ic_launcher_background">#0E1116</color>
+    <color name="ic_launcher_accent_blue">#68D8FF</color>
+    <color name="ic_launcher_accent_mint">#64E3B1</color>
+    <color name="ic_launcher_accent_amber">#FFC857</color>
+    <color name="ic_launcher_surface">#18202B</color>
+    <color name="ic_launcher_surface_high">#263142</color>
+</resources>

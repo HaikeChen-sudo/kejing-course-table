@@ -1,0 +1,26 @@
+.DS_Store
+
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+*/build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# Generated APKs and reports
+*.apk
+*.aab
+
+# Local snapshots and design/reference files
+/*.jpg
+/*.jpeg
+/*.png
+/*.html
+/*.docx.bak
+
+# Local assistant/tooling folders
+.claude/

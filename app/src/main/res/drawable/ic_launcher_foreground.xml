@@ -1,0 +1,38 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/ic_launcher_surface"
+        android:pathData="M28,24h52c4.42,0 8,3.58 8,8v44c0,4.42 -3.58,8 -8,8H28c-4.42,0 -8,-3.58 -8,-8V32c0,-4.42 3.58,-8 8,-8z" />
+    <path
+        android:fillColor="@color/ic_launcher_surface_high"
+        android:pathData="M28,24h52c4.42,0 8,3.58 8,8v10H20V32c0,-4.42 3.58,-8 8,-8z" />
+    <path
+        android:fillColor="@color/ic_launcher_accent_blue"
+        android:pathData="M33,33m-3,0a3,3 0,1 0,6 0a3,3 0,1 0,-6 0" />
+    <path
+        android:fillColor="@color/ic_launcher_accent_mint"
+        android:pathData="M45,33m-3,0a3,3 0,1 0,6 0a3,3 0,1 0,-6 0" />
+    <path
+        android:fillColor="@color/ic_launcher_accent_amber"
+        android:pathData="M57,33m-3,0a3,3 0,1 0,6 0a3,3 0,1 0,-6 0" />
+    <path
+        android:fillColor="@color/ic_launcher_accent_blue"
+        android:pathData="M31,50h20c2.21,0 4,1.79 4,4v10c0,2.21 -1.79,4 -4,4H31c-2.21,0 -4,-1.79 -4,-4V54c0,-2.21 1.79,-4 4,-4z" />
+    <path
+        android:fillColor="@color/ic_launcher_accent_mint"
+        android:pathData="M62,50h15c2.21,0 4,1.79 4,4v10c0,2.21 -1.79,4 -4,4H62c-2.21,0 -4,-1.79 -4,-4V54c0,-2.21 1.79,-4 4,-4z" />
+    <path
+        android:fillColor="@color/ic_launcher_accent_amber"
+        android:pathData="M31,72h46c2.21,0 4,1.79 4,4v3c0,2.21 -1.79,4 -4,4H31c-2.21,0 -4,-1.79 -4,-4v-3c0,-2.21 1.79,-4 4,-4z" />
+    <path
+        android:fillAlpha="0.22"
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,50h19c2.21,0 4,1.79 4,4v1H27v-1c0,-2.21 1.79,-4 4,-4z" />
+    <path
+        android:fillAlpha="0.18"
+        android:fillColor="#FFFFFF"
+        android:pathData="M63,50h14c2.21,0 4,1.79 4,4v1H58v-1c0,-2.21 1.79,-4 4,-4z" />
+</vector>
