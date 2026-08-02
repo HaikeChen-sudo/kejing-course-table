@@ -414,8 +414,8 @@ class ManualPortalScheduleParserTest {
         assertEquals(listOf(2..5, 7..9, 11..19), materialCourses.map { it.weeks })
         val material = materialCourses.first()
         assertEquals(DayOfWeek.MONDAY, material.dayOfWeek)
-        assertEquals(LocalTime.of(8, 0), material.startTime)
-        assertEquals(LocalTime.of(9, 40), material.endTime)
+        assertEquals(LocalTime.of(8, 15), material.startTime)
+        assertEquals(LocalTime.of(9, 50), material.endTime)
         assertEquals("九里校区 B01-505", material.location)
         assertEquals("赵璐", material.teacher)
 
@@ -423,8 +423,8 @@ class ManualPortalScheduleParserTest {
         assertEquals(listOf(4..4, 6..6), policyCourses.map { it.weeks })
         val policy = policyCourses.first()
         assertEquals(DayOfWeek.TUESDAY, policy.dayOfWeek)
-        assertEquals(LocalTime.of(10, 0), policy.startTime)
-        assertEquals(LocalTime.of(11, 40), policy.endTime)
+        assertEquals(LocalTime.of(10, 10), policy.startTime)
+        assertEquals(LocalTime.of(11, 45), policy.endTime)
         assertEquals("九里校区 B01-506", policy.location)
         assertEquals("王强", policy.teacher)
     }

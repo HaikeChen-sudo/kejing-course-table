@@ -738,7 +738,8 @@ class ZfsoftScheduleParser : SchoolScheduleParser {
 
         // 提取节次
         val periods = text.parseZfsoftPeriodRange() ?: defaultPeriods ?: return emptyList()
-        val timeRange = periodToTimeRange(periods.first, periods.last)
+        val timeRange = periodTimeTable.resolve(periods)
+            ?: periodToTimeRange(periods.first, periods.last)
 
         // 提取周数
         val weekRanges = parseWeekRangesFromZfsoft(text)
