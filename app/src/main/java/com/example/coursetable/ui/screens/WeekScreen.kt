@@ -2,11 +2,11 @@ package com.example.coursetable.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,17 +28,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,7 +55,6 @@ import com.example.coursetable.core.design.KejingShape
 import com.example.coursetable.core.design.palette
 import com.example.coursetable.domain.model.Course
 import com.example.coursetable.ui.ScheduleUiState
-import com.example.coursetable.ui.components.SemesterPicker
 import com.example.coursetable.ui.components.zhShortName
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -60,17 +62,14 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 private val TimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val DateFormatter = DateTimeFormatter.ofPattern("M/d")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeekScreen(
     uiState: ScheduleUiState,
     onSelectDay: (DayOfWeek) -> Unit,
-    onSelectSemester: (String) -> Unit,
     onPreviousWeek: () -> Unit,
     onNextWeek: () -> Unit,
-    onResetToCurrentWeek: () -> Unit,
     onOpenAddCourse: () -> Unit,
     onOpenSemesterManager: () -> Unit,
     onOpenCourseDetail: (String) -> Unit,
@@ -86,22 +85,21 @@ fun WeekScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = KejingColors.Ink,
-        contentColor = KejingColors.Porcelain,
+        containerColor = Color.Transparent,
+        contentColor = KejingColors.Ink,
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets(0.dp),
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = KejingColors.Ink,
-                    titleContentColor = KejingColors.Porcelain,
-                    actionIconContentColor = KejingColors.Orange,
-                    navigationIconContentColor = KejingColors.Orange,
+                    containerColor = Color.Transparent,
+                    titleContentColor = KejingColors.Ink,
+                    actionIconContentColor = KejingColors.Ink,
                 ),
                 title = {
-                    SemesterPicker(
-                        semesters = uiState.semesters,
-                        selectedSemester = uiState.selectedSemester,
-                        onSelectSemester = onSelectSemester,
+                    Text(
+                        text = "第 ${uiState.selectedWeek} 周",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 },
                 actions = {
@@ -122,76 +120,24 @@ fun WeekScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(KejingColors.CanvasTop, KejingColors.CanvasBottom),
+                    ),
+                )
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
         ) {
-            WeekSwitcher(
-                uiState = uiState,
-                onPreviousWeek = onPreviousWeek,
-                onNextWeek = onNextWeek,
-                onResetToCurrentWeek = onResetToCurrentWeek,
-            )
             TimelineGrid(
                 uiState = uiState,
                 onSelectDay = onSelectDay,
+                onPreviousWeek = onPreviousWeek,
+                onNextWeek = onNextWeek,
                 onOpenCourseDetail = onOpenCourseDetail,
-                modifier = Modifier.weight(1f),
             )
-        }
-    }
-}
-
-@Composable
-private fun WeekSwitcher(
-    uiState: ScheduleUiState,
-    onPreviousWeek: () -> Unit,
-    onNextWeek: () -> Unit,
-    onResetToCurrentWeek: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .shadow(14.dp, KejingShape.Widget, clip = false)
-            .background(KejingColors.Black, KejingShape.Widget)
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        IconButton(onClick = onPreviousWeek) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
-                contentDescription = "上一周",
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = "第 ${uiState.selectedWeek} 周",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = KejingColors.Orange,
-            )
-            Text(
-                text = "${uiState.weekStartDate.format(DateFormatter)}-${uiState.weekStartDate.plusDays(6).format(DateFormatter)} · ${uiState.selectedSemester?.displayName.orEmpty()}",
-                style = MaterialTheme.typography.labelSmall,
-                color = KejingColors.Paper,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onResetToCurrentWeek) {
-                Text("本周")
-            }
-            IconButton(onClick = onNextWeek) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = "下一周",
-                )
-            }
         }
     }
 }
@@ -200,19 +146,20 @@ private fun WeekSwitcher(
 private fun TimelineGrid(
     uiState: ScheduleUiState,
     onSelectDay: (DayOfWeek) -> Unit,
+    onPreviousWeek: () -> Unit,
+    onNextWeek: () -> Unit,
     onOpenCourseDetail: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val verticalScroll = rememberScrollState()
-    val timeColumnWidth = 30.dp
-    val slotHeight = 96.dp
-    val semesterCourses = uiState.selectedSemester?.courses.orEmpty()
-    val periodSlots = remember(semesterCourses) { semesterCourses.toCompressedPeriodSlots() }
+    var horizontalDrag by remember { mutableFloatStateOf(0f) }
+    val timeColumnWidth = 36.dp
+    val slotHeight = 112.dp
+    val periodSlots = StandardPeriodSlots
     val totalHeight = slotHeight * periodSlots.size.toFloat()
 
     Column(
-        modifier = modifier
-            .fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
@@ -222,7 +169,9 @@ private fun TimelineGrid(
         ) {
             Spacer(Modifier.width(timeColumnWidth))
             DayOfWeek.entries.forEach { day ->
-                val date = uiState.weekStartDate.plusDays((day.value - DayOfWeek.MONDAY.value).toLong())
+                val date = uiState.weekStartDate.plusDays(
+                    (day.value - DayOfWeek.MONDAY.value).toLong(),
+                )
                 val isToday = date == LocalDate.now()
                 val selected = isToday || day == uiState.selectedDay
                 Column(
@@ -235,13 +184,13 @@ private fun TimelineGrid(
                     Text(
                         text = day.zhShortName(),
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (selected) KejingColors.Orange else KejingColors.Porcelain,
+                        color = KejingColors.Ink.copy(alpha = if (selected) 1f else 0.68f),
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = date.format(DateFormatter),
+                        text = "${date.monthValue}/${date.dayOfMonth}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (selected) KejingColors.Orange else KejingColors.Paper,
+                        color = KejingColors.Ink.copy(alpha = if (selected) 1f else 0.62f),
                         fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal,
                     )
                 }
@@ -250,6 +199,21 @@ private fun TimelineGrid(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .pointerInput(uiState.selectedWeek) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { horizontalDrag = 0f },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            horizontalDrag += dragAmount
+                        },
+                        onDragEnd = {
+                            when {
+                                horizontalDrag >= 72f -> onPreviousWeek()
+                                horizontalDrag <= -72f -> onNextWeek()
+                            }
+                        },
+                    )
+                }
                 .verticalScroll(verticalScroll),
         ) {
             Row(
@@ -307,7 +271,7 @@ private fun TimeColumn(
                         lineHeight = 10.sp,
                     ),
                     textAlign = TextAlign.End,
-                    color = KejingColors.Porcelain,
+                    color = KejingColors.Ink,
                 )
                 Text(
                     text = slot.end.format(TimeFormatter),
@@ -316,7 +280,7 @@ private fun TimeColumn(
                         lineHeight = 10.sp,
                     ),
                     textAlign = TextAlign.End,
-                    color = KejingColors.Paper,
+                    color = KejingColors.Ink.copy(alpha = 0.62f),
                 )
             }
         }
@@ -335,18 +299,8 @@ private fun DayTimelineColumn(
     BoxWithConstraints(
         modifier = modifier
             .height(totalHeight)
-            .shadow(6.dp, KejingShape.Control, clip = false)
-            .background(KejingColors.Track, KejingShape.Control)
+            .dashedHorizontalLines(slotHeight = slotHeight, rowCount = periodSlots.size),
     ) {
-        periodSlots.forEachIndexed { index, _ ->
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .offset(y = slotHeight * index.toFloat())
-                    .background(KejingColors.Graphite.copy(alpha = 0.2f)),
-            )
-        }
         layoutOverlappingCourses(courses).forEach { item ->
             val course = item.course
             val startSlot = periodSlots.firstOverlappingSlotIndex(course) ?: return@forEach
@@ -356,8 +310,7 @@ private fun DayTimelineColumn(
                 course = course,
                 detailLevel = when {
                     slotSpan >= 2 -> CourseDetailLevel.Full
-                    slotHeight >= 78.dp -> CourseDetailLevel.Medium
-                    else -> CourseDetailLevel.Compact
+                    else -> CourseDetailLevel.Medium
                 },
                 onClick = { onOpenCourseDetail(course.id) },
                 modifier = Modifier
@@ -381,65 +334,52 @@ private fun CourseBlock(
     modifier: Modifier = Modifier,
 ) {
     val palette = course.colorSeed.palette()
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        color = palette.container,
-        contentColor = palette.content,
-        shape = KejingShape.Control,
-        tonalElevation = 0.dp,
-        shadowElevation = 5.dp,
+    Column(
+        modifier = modifier
+            .background(palette.container, KejingShape.Control)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 5.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 5.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+        Text(
+            text = course.name.toCompactCourseName(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+            ),
+            fontWeight = FontWeight.SemiBold,
+            color = palette.content,
+            maxLines = if (detailLevel == CourseDetailLevel.Full) 3 else 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (detailLevel == CourseDetailLevel.Full && course.teacher != "未识别") {
             Text(
-                text = course.name.toCompactCourseName(),
+                text = course.teacher,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
+                    fontSize = 8.sp,
+                    lineHeight = 9.sp,
                 ),
-                fontWeight = FontWeight.SemiBold,
-                color = palette.content,
-                maxLines = when (detailLevel) {
-                    CourseDetailLevel.Full -> 3
-                    CourseDetailLevel.Medium -> 2
-                    CourseDetailLevel.Compact -> 3
-                },
+                color = palette.support,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (detailLevel == CourseDetailLevel.Full && course.teacher != "未识别") {
-                Text(
-                    text = course.teacher,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 8.sp,
-                        lineHeight = 9.sp,
-                    ),
-                    color = palette.support,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (detailLevel != CourseDetailLevel.Compact || course.location.length <= 8) {
-                Text(
-                    text = course.location.removePrefix("曹妃甸校区"),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 8.sp,
-                        lineHeight = 9.sp,
-                    ),
-                    color = palette.support,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        }
+        if (detailLevel == CourseDetailLevel.Full || course.location.length <= 8) {
+            Text(
+                text = course.location.removePrefix("曹妃甸校区"),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 8.sp,
+                    lineHeight = 9.sp,
+                ),
+                color = palette.support,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
 
 private enum class CourseDetailLevel {
-    Compact,
     Medium,
     Full,
 }
@@ -498,41 +438,16 @@ private data class PeriodSlot(
     val end: LocalTime,
 )
 
-private val DefaultPeriodSlots = listOf(
-    PeriodSlot(LocalTime.of(8, 0), LocalTime.of(9, 40)),
-    PeriodSlot(LocalTime.of(10, 0), LocalTime.of(11, 40)),
-    PeriodSlot(LocalTime.of(14, 0), LocalTime.of(15, 40)),
-    PeriodSlot(LocalTime.of(16, 0), LocalTime.of(17, 40)),
-    PeriodSlot(LocalTime.of(19, 0), LocalTime.of(20, 40)),
+private val StandardPeriodSlots = listOf(
+    PeriodSlot(LocalTime.of(8, 30), LocalTime.of(9, 15)),
+    PeriodSlot(LocalTime.of(9, 20), LocalTime.of(10, 5)),
+    PeriodSlot(LocalTime.of(10, 25), LocalTime.of(11, 10)),
+    PeriodSlot(LocalTime.of(11, 15), LocalTime.of(12, 0)),
+    PeriodSlot(LocalTime.of(14, 0), LocalTime.of(14, 45)),
+    PeriodSlot(LocalTime.of(14, 50), LocalTime.of(15, 35)),
+    PeriodSlot(LocalTime.of(15, 55), LocalTime.of(16, 40)),
+    PeriodSlot(LocalTime.of(16, 45), LocalTime.of(17, 30)),
 )
-
-private fun List<Course>.toCompressedPeriodSlots(): List<PeriodSlot> {
-    if (isEmpty()) return DefaultPeriodSlots
-
-    val courseSlots = mapNotNull { course ->
-        if (course.endTime.isAfter(course.startTime)) {
-            PeriodSlot(course.startTime, course.endTime)
-        } else {
-            null
-        }
-    }
-        .distinct()
-        .sortedWith(compareBy<PeriodSlot> { it.start }.thenBy { it.end })
-
-    if (courseSlots.isEmpty()) return DefaultPeriodSlots
-
-    return courseSlots
-        .filterNot { slot ->
-            courseSlots.any { other ->
-                other != slot &&
-                    !other.start.isBefore(slot.start) &&
-                    !other.end.isAfter(slot.end) &&
-                    (other.start != slot.start || other.end != slot.end)
-            }
-        }
-        .ifEmpty { DefaultPeriodSlots }
-        .take(12)
-}
 
 private fun List<PeriodSlot>.firstOverlappingSlotIndex(course: Course): Int? {
     return indexOfFirst { slot ->
@@ -548,4 +463,21 @@ private fun List<PeriodSlot>.overlappingSlotSpan(course: Course): Int {
 
 private fun String.toCompactCourseName(): String {
     return replace(Regex("_[0-9A-Za-z-]+$"), "")
+}
+
+private fun Modifier.dashedHorizontalLines(slotHeight: Dp, rowCount: Int): Modifier {
+    return drawBehind {
+        val dash = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 3.dp.toPx()))
+        val strokeWidth = 0.5.dp.toPx()
+        repeat(rowCount + 1) { index ->
+            val y = slotHeight.toPx() * index
+            drawLine(
+                color = KejingColors.Ink.copy(alpha = 0.42f),
+                start = androidx.compose.ui.geometry.Offset(0f, y),
+                end = androidx.compose.ui.geometry.Offset(size.width, y),
+                strokeWidth = strokeWidth,
+                pathEffect = dash,
+            )
+        }
+    }
 }

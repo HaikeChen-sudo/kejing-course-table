@@ -59,7 +59,6 @@ import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
 import com.example.coursetable.data.remote.NcstPortal
 import com.example.coursetable.data.remote.PortalSchoolConfig
-import com.example.coursetable.data.remote.XzcitPortal
 import kotlinx.coroutines.delay
 
 private const val MobileChromeUserAgent =

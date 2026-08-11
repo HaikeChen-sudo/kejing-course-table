@@ -5,6 +5,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 object KejingColors {
+    val CanvasTop = Color.White
+    val CanvasBottom = Color(0xFFB5B8BB)
+    val NavigationPill = Color(0xFFEFE8D6)
     val Ink = Color(0xFF1E2421)
     val Paper = Color(0xFFE4E7E0)
     val Orange = Color(0xFFFF920F)

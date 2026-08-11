@@ -20,12 +20,6 @@ data class PortalSchoolConfig(
                 entryUrl = NcstPortal.ENTRY_URL,
                 host = NcstPortal.HOST,
             ),
-            PortalSchoolConfig(
-                schoolCode = XzcitPortal.SCHOOL_CODE,
-                schoolName = XzcitPortal.SCHOOL_NAME,
-                entryUrl = XzcitPortal.ENTRY_URL,
-                host = XzcitPortal.HOST,
-            ),
         )
 
         /**
