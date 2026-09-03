@@ -185,10 +185,27 @@ private data class PeriodTimeTable(
     }
 }
 
-class NcstPortalScheduleParser : SchoolScheduleParser by GenericTableScheduleParser(
-    parserId = "ncst-portal",
-    schoolKeywords = listOf("xjw1.ncst.edu.cn", "华北理工", "华北理工大学"),
-)
+class NcstPortalScheduleParser(
+    private val genericParser: GenericTableScheduleParser = GenericTableScheduleParser(
+        parserId = "ncst-portal",
+        schoolKeywords = listOf(
+            "xjw1.ncst.edu.cn",
+            "华北理工",
+            "华北理工大学",
+            "新URP系统1",
+            "new urp",
+        ),
+    ),
+) : SchoolScheduleParser {
+    override val parserId: String = "ncst-portal"
+
+    override fun parse(snapshot: PortalPageSnapshot): ScheduleParseResult {
+        return genericParser.parse(snapshot)
+            .withAcademicTermMetadata(snapshot)
+            .withNcstAcademicCalendar(snapshot)
+            .withNcstHistoricalSemesterDefaults(snapshot)
+    }
+}
 
 class GenericTableScheduleParser(
     override val parserId: String = "generic-table",

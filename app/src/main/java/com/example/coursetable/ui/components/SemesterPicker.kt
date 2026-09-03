@@ -36,8 +36,8 @@ fun SemesterPicker(
     Box {
         Surface(
             onClick = { expanded = true },
-            color = KejingColors.Black,
-            contentColor = KejingColors.Porcelain,
+            color = KejingColors.Panel,
+            contentColor = KejingColors.Ink,
             shape = KejingShape.Control,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -55,7 +55,7 @@ fun SemesterPicker(
                 Icon(
                     imageVector = Icons.Rounded.ExpandMore,
                     contentDescription = "展开学期列表",
-                    tint = KejingColors.Orange,
+                    tint = KejingColors.Ink,
                 )
             }
         }
@@ -64,7 +64,7 @@ fun SemesterPicker(
             onDismissRequest = { expanded = false },
             modifier = Modifier
                 .padding(vertical = 4.dp),
-            containerColor = KejingColors.Black,
+            containerColor = KejingColors.Panel,
             shape = KejingShape.Control,
         ) {
             semesters.forEach { semester ->
@@ -75,7 +75,7 @@ fun SemesterPicker(
                         onSelectSemester(semester.id)
                     },
                     colors = MenuDefaults.itemColors(
-                        textColor = KejingColors.Porcelain,
+                        textColor = KejingColors.Ink,
                     ),
                 )
             }

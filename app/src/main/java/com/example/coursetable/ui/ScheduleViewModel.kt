@@ -3,6 +3,7 @@ package com.example.coursetable.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.coursetable.data.local.LocalMemoStore
 import com.example.coursetable.data.local.ManualPortalPageStore
 import com.example.coursetable.data.remote.AcademicPortalClient
 import com.example.coursetable.data.remote.ManualPortalScheduleParser
@@ -10,29 +11,35 @@ import com.example.coursetable.data.repository.ScheduleRepository
 import com.example.coursetable.domain.model.Course
 import com.example.coursetable.domain.model.CourseColorSeed
 import com.example.coursetable.domain.model.ImportMode
+import com.example.coursetable.domain.model.Memo
 import com.example.coursetable.domain.model.ScheduleDefaults
 import com.example.coursetable.domain.model.SemesterSchedule
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.TemporalAdjusters
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONTokener
 
 data class ScheduleUiState(
     val semesters: List<SemesterSchedule> = emptyList(),
     val selectedSemester: SemesterSchedule? = null,
     val selectedDay: DayOfWeek = LocalDate.now().dayOfWeek,
+    val currentWeek: Int = 1,
     val selectedWeek: Int = 1,
     val weekStartDate: LocalDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),
     val todayCourses: List<Course> = emptyList(),
     val weekCourses: Map<DayOfWeek, List<Course>> = emptyMap(),
+    val memos: List<Memo> = emptyList(),
     val isImportDialogOpen: Boolean = false,
     val isSyncing: Boolean = false,
+    val importCompleted: Boolean = false,
     val message: String? = null,
 )
 
@@ -41,20 +48,28 @@ class ScheduleViewModel(
     private val portalClient: AcademicPortalClient,
     private val manualPortalPageStore: ManualPortalPageStore,
     private val manualPortalScheduleParser: ManualPortalScheduleParser,
+    private val memoStore: LocalMemoStore,
 ) : ViewModel() {
     private val selectedDay = MutableStateFlow(LocalDate.now().dayOfWeek)
     private val selectedWeekOverride = MutableStateFlow<Int?>(null)
+    private val memos = MutableStateFlow<List<Memo>>(emptyList())
     private val _uiState = MutableStateFlow(ScheduleUiState())
     val uiState: StateFlow<ScheduleUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            memos.value = withContext(Dispatchers.IO) { memoStore.load() }
+        }
         viewModelScope.launch {
             combine(
                 repository.schedules,
                 repository.selectedSemesterId,
                 selectedDay,
                 selectedWeekOverride,
-            ) { semesters, selectedSemesterId, selectedDay, selectedWeekOverride ->
+                memos,
+            ) { semesters, selectedSemesterId, selectedDay, selectedWeekOverride, memos ->
+                // 课表过滤/排序放后台线程，不阻塞 UI/动画
+                withContext(Dispatchers.Default) {
                 val selected = semesters.firstOrNull { it.id == selectedSemesterId }
                     ?: semesters.firstOrNull()
                 val totalWeeks = selected?.totalWeeks?.coerceAtLeast(1) ?: 1
@@ -66,6 +81,7 @@ class ScheduleViewModel(
                 val selectedWeek = selectedWeekOverride
                     ?: currentWeek
                 val weekStartDate = selected?.semesterStartDate
+                    ?.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                     ?.plusWeeks((selectedWeek - 1).toLong())
                     ?: LocalDate.now()
                         .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -74,6 +90,7 @@ class ScheduleViewModel(
                     semesters = semesters,
                     selectedSemester = selected,
                     selectedDay = selectedDay,
+                    currentWeek = currentWeek,
                     selectedWeek = selectedWeek,
                     weekStartDate = weekStartDate,
                     todayCourses = selected
@@ -93,11 +110,16 @@ class ScheduleViewModel(
                             ?.sortedBy { it.startTime }
                             .orEmpty()
                     },
+                    memos = memos,
                     isImportDialogOpen = _uiState.value.isImportDialogOpen,
                     isSyncing = _uiState.value.isSyncing,
+                    importCompleted = _uiState.value.importCompleted,
                     message = _uiState.value.message,
                 )
-            }.collect { _uiState.value = it }
+                }
+            }.collect { refreshedState ->
+                _uiState.value = mergeScheduleState(refreshedState, _uiState.value)
+            }
         }
     }
 
@@ -125,6 +147,31 @@ class ScheduleViewModel(
         selectedWeekOverride.value = null
     }
 
+    fun saveMemo(id: String?, title: String, content: String) {
+        viewModelScope.launch {
+            val cleanTitle = title.trim()
+            val cleanContent = content.trimEnd()
+            if (id == null && cleanTitle.isBlank() && cleanContent.isBlank()) return@launch
+            val memo = Memo(
+                id = id ?: "memo-${System.currentTimeMillis()}",
+                title = cleanTitle,
+                content = cleanContent,
+                updatedAtMillis = System.currentTimeMillis(),
+            )
+            val updated = upsertMemo(memos.value, memo)
+            withContext(Dispatchers.IO) { memoStore.save(updated) }
+            memos.value = updated
+        }
+    }
+
+    fun deleteMemo(id: String) {
+        viewModelScope.launch {
+            val updated = memos.value.filterNot { it.id == id }
+            withContext(Dispatchers.IO) { memoStore.save(updated) }
+            memos.value = updated
+        }
+    }
+
     fun addManualCourse(
         name: String,
         dayOfWeek: DayOfWeek,
@@ -144,6 +191,12 @@ class ScheduleViewModel(
                 _uiState.value = _uiState.value.copy(message = "结束时间需要晚于开始时间")
                 return@launch
             }
+            val selectedCourses = _uiState.value.selectedSemester?.courses.orEmpty()
+            val usedSeeds = selectedCourses.map { it.colorSeed }.toSet()
+            val sameNameSeed = selectedCourses.firstOrNull { it.name == trimmedName }?.colorSeed
+            val colorSeed = sameNameSeed
+                ?: CourseColorSeed.entries.firstOrNull { it !in usedSeeds }
+                ?: CourseColorSeed.entries[trimmedName.hashCode().absoluteValue() % CourseColorSeed.entries.size]
             val course = Course(
                 id = "manual-${System.currentTimeMillis()}-${trimmedName.hashCode()}",
                 name = trimmedName,
@@ -153,7 +206,7 @@ class ScheduleViewModel(
                 location = location.trim().ifBlank { "未填写地点" },
                 teacher = teacher.trim().ifBlank { "未填写教师" },
                 weeks = weeks,
-                colorSeed = CourseColorSeed.entries[trimmedName.hashCode().absoluteValue() % CourseColorSeed.entries.size],
+                colorSeed = colorSeed,
             )
             val saved = repository.addCourseToSelected(course)
             _uiState.value = _uiState.value.copy(
@@ -187,7 +240,8 @@ class ScheduleViewModel(
             }.onSuccess {
                 _uiState.value = _uiState.value.copy(
                     isSyncing = false,
-                    message = "已从教务系统同步课表",
+                    importCompleted = true,
+                    message = "导入成功",
                 )
             }.onFailure {
                 _uiState.value = _uiState.value.copy(
@@ -199,7 +253,11 @@ class ScheduleViewModel(
     }
 
     fun clearMessage() {
-        _uiState.value = _uiState.value.copy(message = null)
+        _uiState.value = consumeMessage(_uiState.value)
+    }
+
+    fun consumeImportCompleted() {
+        _uiState.value = clearImportCompleted(_uiState.value)
     }
 
     fun deleteCourse(courseId: String) {
@@ -230,22 +288,27 @@ class ScheduleViewModel(
             val snapshotHtml = extractHtmlFromPayload(decodedPayload)
             android.util.Log.d("ScheduleParser", "snapshotHtml length: ${snapshotHtml.length}")
 
-            val savedFile = manualPortalPageStore.saveLatest(
-                url = normalizedUrl,
-                title = title,
-                html = snapshotHtml,
-            )
-            val (parsedSchedule, diagnostics) = manualPortalScheduleParser.parseWithDiagnostics(
-                url = normalizedUrl,
-                title = title,
-                html = decodedPayload,
-            )
+            val savedFile = withContext(Dispatchers.IO) {
+                manualPortalPageStore.saveLatest(
+                    url = normalizedUrl,
+                    title = title,
+                    html = snapshotHtml,
+                )
+            }
+            val (parsedSchedule, diagnostics) = withContext(Dispatchers.Default) {
+                manualPortalScheduleParser.parseWithDiagnostics(
+                    url = normalizedUrl,
+                    title = title,
+                    html = decodedPayload,
+                )
+            }
 
             if (parsedSchedule != null) {
                 android.util.Log.d("ScheduleParser", "Success: ${parsedSchedule.courses.size} courses")
                 repository.importSchedule(parsedSchedule, ImportMode.CreateNewFolder)
                 _uiState.value = _uiState.value.copy(
-                    message = "已导入 ${parsedSchedule.courses.size} 门课程：${parsedSchedule.displayName}",
+                    importCompleted = true,
+                    message = "导入成功：${parsedSchedule.courses.size} 门课程",
                 )
                 return@launch
             }
@@ -301,6 +364,7 @@ class ScheduleViewModel(
         private val portalClient: AcademicPortalClient,
         private val manualPortalPageStore: ManualPortalPageStore,
         private val manualPortalScheduleParser: ManualPortalScheduleParser,
+        private val memoStore: LocalMemoStore,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -309,16 +373,37 @@ class ScheduleViewModel(
                 portalClient = portalClient,
                 manualPortalPageStore = manualPortalPageStore,
                 manualPortalScheduleParser = manualPortalScheduleParser,
+                memoStore = memoStore,
             ) as T
         }
     }
 }
 
+internal fun mergeScheduleState(
+    refreshedState: ScheduleUiState,
+    currentState: ScheduleUiState,
+): ScheduleUiState = refreshedState.copy(
+    isImportDialogOpen = currentState.isImportDialogOpen,
+    isSyncing = currentState.isSyncing,
+    importCompleted = currentState.importCompleted,
+    message = currentState.message,
+)
+
+internal fun clearImportCompleted(state: ScheduleUiState): ScheduleUiState = state.copy(
+    importCompleted = false,
+    message = null,
+)
+
+internal fun consumeMessage(state: ScheduleUiState): ScheduleUiState = state.copy(message = null)
+
+internal fun upsertMemo(existing: List<Memo>, memo: Memo): List<Memo> =
+    (existing.filterNot { it.id == memo.id } + memo).sortedByDescending(Memo::updatedAtMillis)
+
 private fun SemesterSchedule.actualWeekForToday(): Int? {
     val startDate = semesterStartDate ?: return currentWeek
     val todayWeekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    return (java.time.temporal.ChronoUnit.WEEKS.between(startDate, todayWeekStart) + 1)
-        .toInt()
+    val firstTeachingWeek = startDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    return (java.time.temporal.ChronoUnit.WEEKS.between(firstTeachingWeek, todayWeekStart) + 1).toInt()
 }
 
 private fun Int.absoluteValue(): Int {

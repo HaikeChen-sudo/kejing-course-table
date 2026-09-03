@@ -34,7 +34,7 @@ internal fun inferAcademicCalendar(
         ?: pageWeekStart?.let { weekStart ->
             weekBetween(text.guessAcademicSemesterStart(weekStart, anchor), weekStart)
         }
-        ?: estimateCurrentWeek(anchor)
+        ?: 1
 
     val semesterStartDate = when {
         pageWeekStart != null -> pageWeekStart.minusWeeks((currentWeek - 1).toLong())
@@ -117,9 +117,9 @@ private fun String.guessAcademicSemesterStart(pageWeekStart: LocalDate, anchor: 
 
     val estimated = when {
         isSpring -> LocalDate.of(secondYear ?: pageWeekStart.year, 2, 24)
-        isAutumn -> LocalDate.of(firstYear ?: pageWeekStart.year, 9, 1)
-        pageWeekStart.monthValue in 1..8 -> LocalDate.of(pageWeekStart.year, 2, 24)
-        else -> LocalDate.of(pageWeekStart.year, 9, 1)
+        isAutumn -> LocalDate.of(firstYear ?: pageWeekStart.year, 8, 31)
+        pageWeekStart.monthValue in 1..7 -> LocalDate.of(pageWeekStart.year, 2, 24)
+        else -> LocalDate.of(pageWeekStart.year, 8, 31)
     }
     return estimated.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 }
@@ -170,7 +170,7 @@ private fun resolveYearForMonth(month: Int, anchor: LocalDate): Int {
 
 private fun estimateCurrentWeek(anchor: LocalDate): Int {
     val estimatedStart = if (anchor.monthValue in 9..12) {
-        LocalDate.of(anchor.year, 9, 1)
+        LocalDate.of(anchor.year, 8, 31)
     } else {
         LocalDate.of(anchor.year, 2, 24)
     }.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))

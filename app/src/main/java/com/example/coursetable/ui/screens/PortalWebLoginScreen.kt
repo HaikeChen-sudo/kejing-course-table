@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
+import com.example.coursetable.core.design.kejingGradientBackground
 import com.example.coursetable.data.remote.NcstPortal
 import com.example.coursetable.data.remote.PortalSchoolConfig
 import kotlinx.coroutines.delay
@@ -119,16 +121,16 @@ fun PortalWebLoginScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = KejingColors.Ink,
-        contentColor = KejingColors.Porcelain,
+        containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+        contentColor = KejingColors.Ink,
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp),
+                windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = KejingColors.Ink,
-                    titleContentColor = KejingColors.Porcelain,
-                    navigationIconContentColor = KejingColors.Orange,
-                    actionIconContentColor = KejingColors.Orange,
+                    containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+                    titleContentColor = KejingColors.Ink,
+                    navigationIconContentColor = KejingColors.Ink,
+                    actionIconContentColor = KejingColors.Ink,
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -228,7 +230,18 @@ fun PortalWebLoginScreen(
                             } catch(e) {}
                             return result;
                           }
+                          function readSelectedFields(doc, source){
+                            try {
+                              return Array.prototype.slice.call(doc.querySelectorAll('select')).map(function(select){
+                                var option = select.options[select.selectedIndex];
+                                var label = cleanInline(option ? (option.text || option.textContent || '') : '');
+                                return '已选字段[' + source + '][' + (select.id || select.name || 'select') + ']: ' +
+                                  (select.value || '') + ' ' + label;
+                              }).join('\n');
+                            } catch(e) { return ''; }
+                          }
                           var tables = readTables(document, 'main');
+                          var selectedFields = readSelectedFields(document, 'main');
                           try {
                             var iframes = document.querySelectorAll('iframe, frame');
                             for (var i = 0; i < iframes.length; i++) {
@@ -236,6 +249,7 @@ fun PortalWebLoginScreen(
                                 var doc = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
                                 if (doc) {
                                   tables = tables.concat(readTables(doc, 'frame-' + i));
+                                  selectedFields += '\n' + readSelectedFields(doc, 'frame-' + i);
                                 }
                               } catch(e) {}
                             }
@@ -246,7 +260,7 @@ fun PortalWebLoginScreen(
                           return JSON.stringify({
                             url: location.href,
                             title: document.title || '',
-                            text: cleanBlock(document.body ? document.body.innerText : ''),
+                            text: cleanBlock((document.body ? document.body.innerText : '') + '\n' + selectedFields),
                             html: document.documentElement.outerHTML || '',
                             tables: tableRows
                           });
@@ -271,6 +285,7 @@ fun PortalWebLoginScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .kejingGradientBackground()
                 .padding(paddingValues),
         ) {
             AndroidView(
@@ -369,8 +384,8 @@ fun PortalWebLoginScreen(
                         .align(Alignment.Center)
                         .fillMaxWidth()
                         .padding(24.dp)
-                        .background(KejingColors.Black, KejingShape.Widget)
-                        .border(1.dp, KejingColors.Graphite, KejingShape.Widget)
+                        .background(KejingColors.Panel, KejingShape.Widget)
+                        .border(1.dp, KejingColors.Ink.copy(alpha = 0.24f), KejingShape.Widget)
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -378,12 +393,12 @@ fun PortalWebLoginScreen(
                     Text(
                         text = "网页登录加载失败",
                         style = MaterialTheme.typography.titleMedium,
-                        color = KejingColors.Porcelain,
+                        color = KejingColors.Ink,
                     )
                     Text(
                         text = message,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = KejingColors.Graphite,
+                        color = KejingColors.Ink.copy(alpha = 0.68f),
                     )
                     Button(
                         onClick = {
@@ -404,8 +419,8 @@ fun PortalWebLoginScreen(
                             webView?.loadUrl(schoolConfig.entryUrl)
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = KejingColors.Graphite,
-                            contentColor = KejingColors.Black,
+                            containerColor = KejingColors.CanvasBottom,
+                            contentColor = KejingColors.Ink,
                         ),
                     ) {
                         Text(if (useDesktopMode) "切回手机模式" else "兼容模式")

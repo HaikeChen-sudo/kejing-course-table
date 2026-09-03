@@ -7,11 +7,8 @@ import org.json.JSONObject
 class ManualPortalPageStore(context: Context) {
     private val root: File = File(context.filesDir, "manual_portal_pages")
 
-    init {
-        root.mkdirs()
-    }
-
     fun saveLatest(url: String, title: String, html: String): File {
+        root.mkdirs()
         val htmlFile = File(root, "latest.html")
         val metadataFile = File(root, "latest.json")
         htmlFile.writeText(html)

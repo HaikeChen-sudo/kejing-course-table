@@ -304,6 +304,125 @@ class ManualPortalScheduleParserTest {
     }
 
     @Test
+    fun readsNewUrpTermMetadataFromPageAndScriptState() {
+        val html = """
+            <html>
+              <head><title>华北理工大学 新URP系统1</title></head>
+              <body>
+                <div>华北理工大学 新URP系统1</div>
+                <div>当前教学周：第3周</div>
+                <script>
+                  window.__INITIAL_STATE__ = {
+                    "semesterName": "2025-2026学年第二学期",
+                    "semesterStartDate": "2026-02-25",
+                    "totalWeeks": 20
+                  };
+                </script>
+                <table>
+                  <tr>
+                    <th>节次</th><th>星期一</th><th>星期二</th><th>星期三</th><th>星期四</th><th>星期五</th>
+                  </tr>
+                  <tr>
+                    <td>第1-2节 08:30-10:05</td>
+                    <td>大学物理<br/>教师：李老师<br/>地点：A101<br/>1-16周</td>
+                    <td></td><td></td><td></td><td></td>
+                  </tr>
+                </table>
+              </body>
+            </html>
+        """.trimIndent()
+
+        val schedule = parser.parse(
+            url = "https://urp.ncst.edu.cn/student/course-table",
+            title = "新URP系统1",
+            html = html,
+        )
+
+        assertNotNull(schedule)
+        schedule!!
+        assertEquals("2025-2026学年第二学期", schedule.displayName)
+        assertEquals(3, schedule.currentWeek)
+        assertEquals(20, schedule.totalWeeks)
+        assertEquals(LocalDate.of(2026, 2, 25), schedule.semesterStartDate)
+        assertEquals(1, schedule.courses.size)
+    }
+
+    @Test
+    fun usesNcstCalendarWhenHistoricalScheduleHasNoStartDate() {
+        val html = """
+            <html><body>
+              <select id="planCode"><option value="2025-2026-2-1">2025-2026学年春</option></select>
+              <table>
+                <tr><th>节次</th><th>星期一</th><th>星期二</th><th>星期三</th><th>星期四</th><th>星期五</th></tr>
+                <tr><td>第1节 08:30-09:15</td><td>大学物理<br/>教师：李老师<br/>地点：A101<br/>1-16周</td><td></td><td></td><td></td><td></td></tr>
+              </table>
+            </body></html>
+        """.trimIndent()
+
+        val schedule = parser.parse(
+            url = "https://xjw1.ncst.edu.cn/student/courseSelect/calendarSemesterCurriculum/index",
+            title = "历年学期课表",
+            html = html,
+        )
+
+        assertNotNull(schedule)
+        schedule!!
+        assertEquals(LocalDate.of(2026, 3, 2), schedule.semesterStartDate)
+        assertEquals(1, schedule.currentWeek)
+    }
+
+    @Test
+    fun usesFall2026NcstCalendarStartDate() {
+        val html = """
+            <html><body>
+              <select id="planCode"><option value="2026-2027-1-1">2026-2027学年秋</option></select>
+              <table>
+                <tr><th>节次</th><th>星期一</th><th>星期二</th><th>星期三</th><th>星期四</th><th>星期五</th></tr>
+                <tr><td>第1节 08:30-09:15</td><td>高等数学<br/>教师：李老师<br/>地点：A101<br/>1-16周</td><td></td><td></td><td></td><td></td></tr>
+              </table>
+            </body></html>
+        """.trimIndent()
+
+        val schedule = parser.parse(
+            url = "https://xjw1.ncst.edu.cn/student/courseSelect/calendarSemesterCurriculum/index",
+            title = "历年学期课表",
+            html = html,
+        )
+
+        assertNotNull(schedule)
+        assertEquals(LocalDate.of(2026, 8, 31), schedule!!.semesterStartDate)
+        assertEquals(1, schedule.currentWeek)
+    }
+
+    @Test
+    fun readsSelectedHistoricalSemesterInsteadOfFirstOption() {
+        val html = """
+            <html><body>
+              <div>已选字段[main][planCode]: 2025-2026-1-1 2025-2026学年秋</div>
+              <select id="planCode">
+                <option value="2025-2026-2-1">2025-2026学年春</option>
+                <option value="2025-2026-1-1">2025-2026学年秋</option>
+              </select>
+              <table>
+                <tr><th>节次</th><th>星期一</th><th>星期二</th><th>星期三</th><th>星期四</th><th>星期五</th></tr>
+                <tr><td>第1节 08:30-09:15</td><td>大学物理<br/>教师：李老师<br/>地点：A101<br/>1-16周</td><td></td><td></td><td></td><td></td></tr>
+              </table>
+            </body></html>
+        """.trimIndent()
+
+        val schedule = parser.parse(
+            url = "https://xjw1.ncst.edu.cn/student/courseSelect/calendarSemesterCurriculum/index",
+            title = "历年学期课表",
+            html = html,
+        )
+
+        assertNotNull(schedule)
+        assertEquals("2025-2026学年第一学期", schedule!!.displayName)
+        assertEquals(1, schedule.currentWeek)
+        assertEquals(LocalDate.of(2025, 9, 1), schedule.semesterStartDate)
+    }
+
+    @Test
     fun parsesXzcitZfsoftGridWithRowspanRealTimesAndDetails() {
         val table = JSONArray()
             .put(

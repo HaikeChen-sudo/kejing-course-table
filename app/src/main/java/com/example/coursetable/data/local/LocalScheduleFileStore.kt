@@ -15,10 +15,6 @@ class LocalScheduleFileStore(context: Context) {
     private val root: File = File(context.filesDir, "semester_schedules")
     private val selectedSemesterFile: File = File(root, "selected_semester.txt")
 
-    init {
-        root.mkdirs()
-    }
-
     fun semesterFolder(folderName: String): File {
         val normalized = folderName
             .trim()
@@ -28,6 +24,7 @@ class LocalScheduleFileStore(context: Context) {
     }
 
     fun loadSchedules(): List<SemesterSchedule> {
+        root.mkdirs()
         return root
             .listFiles()
             .orEmpty()
@@ -59,6 +56,7 @@ class LocalScheduleFileStore(context: Context) {
     }
 
     fun saveSelectedSemesterId(id: String?) {
+        root.mkdirs()
         if (id == null) {
             selectedSemesterFile.delete()
         } else {

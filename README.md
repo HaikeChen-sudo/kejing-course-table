@@ -1,6 +1,6 @@
-# 课境 CourseTable
+# Coursia CourseTable
 
-课境是一个原生 Android 课程表应用，采用 Kotlin、Jetpack Compose、Material 3、Navigation Compose、ViewModel 和 Flow 构建。当前版本已经从骨架推进到可本地管理课表、手动添加课程、网页登录教务系统并解析导入课程表。
+Coursia 是一个原生 Android 课程表应用，采用 Kotlin、Jetpack Compose、Material 3、Navigation Compose、ViewModel 和 Flow 构建。当前版本已经从骨架推进到可本地管理课表、手动添加课程、网页登录教务系统并解析导入课程表。
 
 ## 当前能力
 

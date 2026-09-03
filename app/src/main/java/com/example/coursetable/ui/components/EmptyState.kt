@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.coursetable.core.design.KejingColors
@@ -21,6 +22,9 @@ fun EmptyState(
     title: String,
     subtitle: String,
     modifier: Modifier = Modifier,
+    iconColor: Color = KejingColors.Orange,
+    titleColor: Color = KejingColors.Porcelain,
+    subtitleColor: Color = KejingColors.Paper,
 ) {
     Column(
         modifier = modifier
@@ -32,18 +36,18 @@ fun EmptyState(
         Icon(
             imageVector = Icons.Rounded.EventAvailable,
             contentDescription = null,
-            tint = KejingColors.Orange,
+            tint = iconColor,
         )
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            color = KejingColors.Porcelain,
+            color = titleColor,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = KejingColors.Paper,
+            color = subtitleColor,
         )
     }
 }

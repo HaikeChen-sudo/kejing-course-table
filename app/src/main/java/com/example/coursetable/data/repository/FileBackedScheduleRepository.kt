@@ -1,41 +1,64 @@
 package com.example.coursetable.data.repository
 
 import com.example.coursetable.data.local.LocalScheduleFileStore
+import com.example.coursetable.data.remote.withKnownNcstTermStartDate
 import com.example.coursetable.domain.model.Course
 import com.example.coursetable.domain.model.CourseColorSeed
 import com.example.coursetable.domain.model.ImportMode
 import com.example.coursetable.domain.model.ScheduleDefaults
 import com.example.coursetable.domain.model.SemesterSchedule
+import com.example.coursetable.domain.model.withDistinctColorSeeds
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.temporal.TemporalAdjusters
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class FileBackedScheduleRepository(
     private val fileStore: LocalScheduleFileStore,
 ) : ScheduleRepository {
-    private val initialSchedules = fileStore.loadSchedules().ifEmpty {
-        listOf(seedSemester()).also { schedules ->
-            schedules.forEach(fileStore::saveSchedule)
-        }
-    }
-    private val _schedules = MutableStateFlow(initialSchedules)
-    private val _selectedSemesterId = MutableStateFlow(
-        fileStore.loadSelectedSemesterId()
-            ?.takeIf { selectedId -> initialSchedules.any { it.id == selectedId } }
-            ?: initialSchedules.firstOrNull()?.id,
-    )
+    private val ioDispatcher = Dispatchers.IO
+    private val ioScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val _schedules = MutableStateFlow<List<SemesterSchedule>>(emptyList())
+    private val _selectedSemesterId = MutableStateFlow<String?>(null)
 
     override val schedules: StateFlow<List<SemesterSchedule>> = _schedules.asStateFlow()
     override val selectedSemesterId: StateFlow<String?> = _selectedSemesterId.asStateFlow()
 
+    init {
+        ioScope.launch {
+            val loadedSchedules = fileStore.loadSchedules().ifEmpty {
+                listOf(seedSemester()).also { seededSchedules ->
+                    seededSchedules.forEach(fileStore::saveSchedule)
+                }
+            }
+            val schedules = loadedSchedules.map { schedule ->
+                schedule
+                    .withKnownNcstTermStartDate()
+                    .withDistinctCourseColors()
+            }
+            schedules.zip(loadedSchedules)
+                .filter { (updated, previous) -> updated != previous }
+                .forEach { (updated, _) -> fileStore.saveSchedule(updated) }
+            val selectedId = fileStore.loadSelectedSemesterId()
+                ?.takeIf { storedId -> schedules.any { it.id == storedId } }
+                ?: schedules.firstOrNull()?.id
+            _schedules.value = schedules
+            _selectedSemesterId.value = selectedId
+        }
+    }
+
     override fun selectSemester(id: String) {
         if (_schedules.value.any { it.id == id }) {
             _selectedSemesterId.value = id
-            fileStore.saveSelectedSemesterId(id)
+            ioScope.launch { fileStore.saveSelectedSemesterId(id) }
         }
     }
 
@@ -66,14 +89,16 @@ class FileBackedScheduleRepository(
                 _schedules.value + uniqueSchedule
             }
         }
-        importedSchedule?.let { fileStore.semesterFolder(it.folderName).mkdirs() }
-        importedSchedule?.let(fileStore::saveSchedule)
         _schedules.value = nextSchedules
         _selectedSemesterId.value = when (mode) {
             ImportMode.OverwriteCurrent -> currentId ?: nextSchedules.firstOrNull()?.id
             ImportMode.CreateNewFolder -> nextSchedules.lastOrNull()?.id
         }
-        fileStore.saveSelectedSemesterId(_selectedSemesterId.value)
+        withContext(ioDispatcher) {
+            importedSchedule?.let { fileStore.semesterFolder(it.folderName).mkdirs() }
+            importedSchedule?.let(fileStore::saveSchedule)
+            fileStore.saveSelectedSemesterId(_selectedSemesterId.value)
+        }
     }
 
     override suspend fun addCourseToSelected(course: Course): Boolean {
@@ -96,8 +121,8 @@ class FileBackedScheduleRepository(
             }
         }
         val target = updatedSchedule ?: return false
-        fileStore.saveSchedule(target)
         _schedules.value = nextSchedules
+        withContext(ioDispatcher) { fileStore.saveSchedule(target) }
         return true
     }
 
@@ -120,8 +145,8 @@ class FileBackedScheduleRepository(
             }
         }
         val target = updatedSchedule ?: return false
-        fileStore.saveSchedule(target)
         _schedules.value = nextSchedules
+        withContext(ioDispatcher) { fileStore.saveSchedule(target) }
         return true
     }
 
@@ -130,12 +155,15 @@ class FileBackedScheduleRepository(
         if (_schedules.value.size <= 1) return false
 
         val nextSchedules = _schedules.value.filterNot { it.id == id }
-        val deleted = fileStore.deleteScheduleFolder(schedule.folderName)
         _schedules.value = nextSchedules
 
         if (_selectedSemesterId.value == id) {
             _selectedSemesterId.value = nextSchedules.firstOrNull()?.id
+        }
+        val deleted = withContext(ioDispatcher) {
+            val wasDeleted = fileStore.deleteScheduleFolder(schedule.folderName)
             fileStore.saveSelectedSemesterId(_selectedSemesterId.value)
+            wasDeleted
         }
         return deleted
     }
@@ -211,6 +239,11 @@ class FileBackedScheduleRepository(
     }
 }
 
+private fun SemesterSchedule.withDistinctCourseColors(): SemesterSchedule {
+    val recolored = courses.withDistinctColorSeeds()
+    return if (recolored == courses) this else copy(courses = recolored)
+}
+
 private fun SemesterSchedule.normalizedForImport(): SemesterSchedule {
     val normalizedTotalWeeks = totalWeeks
         .coerceAtLeast(ScheduleDefaults.TOTAL_WEEKS)
@@ -218,10 +251,6 @@ private fun SemesterSchedule.normalizedForImport(): SemesterSchedule {
     return copy(
         currentWeek = currentWeek.coerceIn(1, normalizedTotalWeeks),
         totalWeeks = normalizedTotalWeeks,
-        courses = courses.sortedWith(
-            compareBy<Course> { it.dayOfWeek.value }
-                .thenBy { it.startTime }
-                .thenBy { it.name },
-        ),
+        courses = courses.withDistinctColorSeeds(),
     )
 }

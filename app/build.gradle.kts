@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.coursetable"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.1.11"
+        versionCode = 34
+        versionName = "0.1.34"
     }
 
     buildFeatures {
@@ -31,7 +31,7 @@ android {
     applicationVariants.all {
         val apkVersionName = versionName
         outputs.all {
-            (this as BaseVariantOutputImpl).outputFileName = "kejing-v$apkVersionName-${buildType.name}.apk"
+            (this as BaseVariantOutputImpl).outputFileName = "coursia-v$apkVersionName-${buildType.name}.apk"
         }
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
+import com.example.coursetable.core.design.kejingGradientBackground
 import com.example.coursetable.data.remote.PortalSchoolConfig
 
 /**
@@ -47,15 +49,15 @@ fun SchoolSelectScreen(
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = KejingColors.Ink,
-        contentColor = KejingColors.Porcelain,
+        containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+        contentColor = KejingColors.Ink,
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp),
+                windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = KejingColors.Ink,
-                    titleContentColor = KejingColors.Porcelain,
-                    navigationIconContentColor = KejingColors.Orange,
+                    containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+                    titleContentColor = KejingColors.Ink,
+                    navigationIconContentColor = KejingColors.Ink,
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -72,6 +74,7 @@ fun SchoolSelectScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .kejingGradientBackground()
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -81,7 +84,7 @@ fun SchoolSelectScreen(
                 Text(
                     text = "请选择你的学校教务系统",
                     style = MaterialTheme.typography.titleLarge,
-                    color = KejingColors.Porcelain,
+                    color = KejingColors.Ink,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -99,7 +102,7 @@ fun SchoolSelectScreen(
                 Text(
                     text = "提示：选择学校后将打开对应的教务系统登录页面，登录后点击「读取并导入」即可自动解析课表。",
                     style = MaterialTheme.typography.bodySmall,
-                    color = KejingColors.Graphite,
+                    color = KejingColors.Ink.copy(alpha = 0.68f),
                 )
             }
         }
@@ -115,8 +118,8 @@ private fun SchoolCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        color = KejingColors.Black,
-        contentColor = KejingColors.Porcelain,
+        color = KejingColors.Panel,
+        contentColor = KejingColors.Ink,
         shape = KejingShape.Card,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -124,7 +127,7 @@ private fun SchoolCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, KejingColors.Graphite, KejingShape.Card)
+                .border(1.dp, KejingColors.Ink.copy(alpha = 0.24f), KejingShape.Card)
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -138,13 +141,13 @@ private fun SchoolCard(
                 Text(
                     text = school.schoolName,
                     style = MaterialTheme.typography.titleMedium,
-                    color = KejingColors.Porcelain,
+                    color = KejingColors.Ink,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
                     text = school.host,
                     style = MaterialTheme.typography.bodySmall,
-                    color = KejingColors.Graphite,
+                    color = KejingColors.Ink.copy(alpha = 0.68f),
                 )
             }
         }

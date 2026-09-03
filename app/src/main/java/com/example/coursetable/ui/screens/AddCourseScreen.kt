@@ -1,17 +1,22 @@
 package com.example.coursetable.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import android.view.ContextThemeWrapper
+import android.view.View
+import android.widget.EditText
+import android.widget.NumberPicker
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -33,15 +38,21 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import com.example.coursetable.R
 import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
+import com.example.coursetable.core.design.kejingGradientBackground
+import com.example.coursetable.domain.model.CoursePeriodSchedule
 import com.example.coursetable.domain.model.ScheduleDefaults
 import com.example.coursetable.ui.ScheduleUiState
 import com.example.coursetable.ui.components.zhShortName
@@ -64,40 +75,32 @@ fun AddCourseScreen(
     ) -> Unit,
 ) {
     val totalWeeks = uiState.selectedSemester?.totalWeeks ?: ScheduleDefaults.TOTAL_WEEKS
+    val periods = CoursePeriodSchedule.periods
     var name by remember { mutableStateOf("") }
     var teacher by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var selectedDay by remember(uiState.selectedDay) { mutableStateOf(uiState.selectedDay) }
-    var weekStart by remember(uiState.selectedWeek) { mutableStateOf(uiState.selectedWeek.toString()) }
-    var weekEnd by remember(uiState.selectedWeek) { mutableStateOf(uiState.selectedWeek.toString()) }
-    var startTimeText by remember { mutableStateOf("08:30") }
-    var endTimeText by remember { mutableStateOf("10:05") }
+    var weekStart by remember(uiState.selectedWeek) { mutableIntStateOf(uiState.selectedWeek) }
+    var weekEnd by remember(uiState.selectedWeek) { mutableIntStateOf(uiState.selectedWeek) }
+    var startPeriod by remember { mutableIntStateOf(1) }
+    var endPeriod by remember { mutableIntStateOf(2) }
 
-    val parsedWeekStart = weekStart.toIntOrNull()
-    val parsedWeekEnd = weekEnd.toIntOrNull()
-    val parsedStartTime = startTimeText.parseTimeOrNull()
-    val parsedEndTime = endTimeText.parseTimeOrNull()
-    val canSave = name.isNotBlank() &&
-        parsedWeekStart != null &&
-        parsedWeekEnd != null &&
-        parsedWeekStart in 1..totalWeeks.coerceAtLeast(1) &&
-        parsedWeekEnd in parsedWeekStart..totalWeeks.coerceAtLeast(parsedWeekStart) &&
-        parsedStartTime != null &&
-        parsedEndTime != null &&
-        parsedEndTime.isAfter(parsedStartTime)
+    val start = periods.first { it.number == startPeriod }
+    val end = periods.first { it.number == endPeriod }
+    val canSave = name.isNotBlank() && weekEnd >= weekStart && endPeriod >= startPeriod
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = KejingColors.Ink,
-        contentColor = KejingColors.Porcelain,
+        containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+        contentColor = KejingColors.Ink,
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp),
+                windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = KejingColors.Ink,
-                    titleContentColor = KejingColors.Porcelain,
-                    navigationIconContentColor = KejingColors.Orange,
-                    actionIconContentColor = KejingColors.Orange,
+                    containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+                    titleContentColor = KejingColors.Ink,
+                    navigationIconContentColor = KejingColors.Ink,
+                    actionIconContentColor = KejingColors.Ink,
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -107,28 +110,23 @@ fun AddCourseScreen(
                         )
                     }
                 },
-                title = {
-                    Text(
-                        text = "新增课程",
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                },
+                title = { Text("新增课程", fontWeight = FontWeight.SemiBold) },
                 actions = {
                     IconButton(
                         enabled = canSave,
                         colors = IconButtonDefaults.iconButtonColors(
-                            contentColor = KejingColors.Orange,
-                            disabledContentColor = KejingColors.Graphite,
+                            contentColor = KejingColors.Ink,
+                            disabledContentColor = KejingColors.Ink.copy(alpha = 0.38f),
                         ),
                         onClick = {
                             onSave(
                                 name.trim(),
                                 selectedDay,
-                                parsedStartTime!!,
-                                parsedEndTime!!,
+                                start.start,
+                                end.end,
                                 location,
                                 teacher,
-                                parsedWeekStart!!..parsedWeekEnd!!,
+                                weekStart..weekEnd,
                             )
                             onBack()
                         },
@@ -145,18 +143,14 @@ fun AddCourseScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .kejingGradientBackground()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             item {
-                FormSection(title = "课程信息") {
-                    Text(
-                        text = "COURSE",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = KejingColors.Orange,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                FormLabel("课程信息")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     IndustrialTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -180,81 +174,79 @@ fun AddCourseScreen(
                 }
             }
             item {
-                FormSection(title = "星期") {
-                    Text(
-                        text = "DAY",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = KejingColors.Orange,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        DayOfWeek.entries.forEach { day ->
-                            FilterChip(
-                                selected = selectedDay == day,
-                                onClick = { selectedDay = day },
-                                label = { Text(day.zhShortName()) },
-                                shape = KejingShape.Pill,
-                                colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = KejingColors.Black,
-                                    labelColor = KejingColors.Porcelain,
-                                    selectedContainerColor = KejingColors.Graphite,
-                                    selectedLabelColor = KejingColors.Black,
-                                ),
-                            )
-                        }
+                FormLabel("星期")
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    DayOfWeek.entries.forEach { day ->
+                        FilterChip(
+                            selected = selectedDay == day,
+                            onClick = { selectedDay = day },
+                            label = { Text(day.zhShortName()) },
+                            leadingIcon = if (selectedDay == day) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                            shape = KejingShape.Pill,
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color.Transparent,
+                                labelColor = KejingColors.Ink,
+                                selectedContainerColor = KejingColors.Orange.copy(alpha = 0.16f),
+                                selectedLabelColor = KejingColors.Ink,
+                                selectedLeadingIconColor = KejingColors.Ink,
+                            ),
+                        )
                     }
                 }
             }
             item {
-                FormSection(title = "周次和时间") {
-                    Text(
-                        text = "TIME",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = KejingColors.Orange,
-                        fontWeight = FontWeight.SemiBold,
+                FormLabel("周次")
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NumberWheel(
+                        label = "开始周",
+                        value = weekStart,
+                        range = 1..totalWeeks,
+                        itemText = { "第 $it 周" },
+                        onValueChange = { weekStart = it.coerceAtMost(weekEnd) },
+                        modifier = Modifier.weight(1f),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        IndustrialTextField(
-                            value = weekStart,
-                            onValueChange = { weekStart = it.filter(Char::isDigit).take(2) },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("开始周") },
-                            supportingText = { Text("1-$totalWeeks") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = parsedWeekStart == null || parsedWeekStart !in 1..totalWeeks.coerceAtLeast(1),
-                        )
-                        IndustrialTextField(
-                            value = weekEnd,
-                            onValueChange = { weekEnd = it.filter(Char::isDigit).take(2) },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("结束周") },
-                            supportingText = { Text("可与开始周相同") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = parsedWeekEnd == null || parsedWeekStart == null || parsedWeekEnd < parsedWeekStart,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        IndustrialTextField(
-                            value = startTimeText,
-                            onValueChange = { startTimeText = it.take(5) },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("开始时间") },
-                            supportingText = { Text("HH:mm") },
-                            isError = parsedStartTime == null,
-                        )
-                        IndustrialTextField(
-                            value = endTimeText,
-                            onValueChange = { endTimeText = it.take(5) },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("结束时间") },
-                            supportingText = { Text("HH:mm") },
-                            isError = parsedEndTime == null || parsedStartTime != null && !parsedEndTime.isAfter(parsedStartTime),
-                        )
-                    }
+                    NumberWheel(
+                        label = "结束周",
+                        value = weekEnd,
+                        range = 1..totalWeeks,
+                        itemText = { "第 $it 周" },
+                        onValueChange = { weekEnd = it.coerceAtLeast(weekStart) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            item {
+                FormLabel("节次")
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    NumberWheel(
+                        label = "开始节",
+                        value = startPeriod,
+                        range = periods.first().number..periods.last().number,
+                        itemText = { "第 $it 节" },
+                        onValueChange = { startPeriod = it.coerceAtMost(endPeriod) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    NumberWheel(
+                        label = "结束节",
+                        value = endPeriod,
+                        range = periods.first().number..periods.last().number,
+                        itemText = { "第 $it 节" },
+                        onValueChange = { endPeriod = it.coerceAtLeast(startPeriod) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -262,26 +254,78 @@ fun AddCourseScreen(
 }
 
 @Composable
-private fun FormSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit,
+private fun FormLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        color = KejingColors.Ink,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(bottom = 10.dp),
+    )
+}
+
+@Composable
+private fun NumberWheel(
+    label: String,
+    value: Int,
+    range: IntRange,
+    itemText: (Int) -> String,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(KejingColors.Black, KejingShape.Widget)
-            .border(1.dp, KejingColors.Graphite, KejingShape.Widget)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier = modifier) {
         Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = KejingColors.Porcelain,
-            fontWeight = FontWeight.SemiBold,
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = KejingColors.Ink.copy(alpha = 0.68f),
         )
-        content()
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(116.dp)
+                .clipToBounds(),
+            factory = { context ->
+                NumberPicker(ContextThemeWrapper(context, R.style.KejingNumberPicker)).apply {
+                    descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+                    wrapSelectorWheel = false
+                    setBackgroundColor(AndroidColor.TRANSPARENT)
+                    isVerticalFadingEdgeEnabled = false
+                    setFadingEdgeLength(0)
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    clipChildren = true
+                    setWheelTextColor(AndroidColor.BLACK)
+                }
+            },
+            update = { picker ->
+                picker.displayedValues = null
+                picker.minValue = range.first
+                picker.maxValue = range.last
+                picker.setFormatter { number -> itemText(number) }
+                picker.value = value.coerceIn(range)
+                picker.setOnValueChangedListener { _, _, newValue -> onValueChange(newValue) }
+                picker.setWheelTextColor(AndroidColor.BLACK)
+            },
+        )
     }
+}
+
+private fun NumberPicker.setWheelTextColor(color: Int) {
+    findViewById<EditText>(resources.getIdentifier("number_picker_input", "id", "android"))
+        ?.apply {
+            setTextColor(color)
+            setHintTextColor(color)
+        }
+    runCatching {
+        NumberPicker::class.java.getDeclaredField("mTextColor").apply {
+            isAccessible = true
+            setInt(this@setWheelTextColor, color)
+        }
+        NumberPicker::class.java.getDeclaredField("mSelectorWheelPaint").apply {
+            isAccessible = true
+            (get(this@setWheelTextColor) as Paint).color = color
+        }
+    }
+    invalidate()
 }
 
 @Composable
@@ -290,9 +334,6 @@ private fun IndustrialTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     label: @Composable (() -> Unit)? = null,
-    supportingText: @Composable (() -> Unit)? = null,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    isError: Boolean = false,
 ) {
     OutlinedTextField(
         value = value,
@@ -300,35 +341,18 @@ private fun IndustrialTextField(
         modifier = modifier,
         singleLine = true,
         label = label,
-        supportingText = supportingText,
-        keyboardOptions = keyboardOptions,
-        isError = isError,
+        keyboardOptions = KeyboardOptions.Default,
         shape = KejingShape.Control,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = KejingColors.Porcelain,
-            unfocusedTextColor = KejingColors.Porcelain,
-            focusedContainerColor = KejingColors.Ink,
-            unfocusedContainerColor = KejingColors.Ink,
-            errorContainerColor = KejingColors.Ink,
-            focusedBorderColor = KejingColors.Orange,
-            unfocusedBorderColor = KejingColors.Graphite,
-            errorBorderColor = KejingColors.Orange,
-            focusedLabelColor = KejingColors.Orange,
-            unfocusedLabelColor = KejingColors.Graphite,
-            errorLabelColor = KejingColors.Orange,
-            focusedSupportingTextColor = KejingColors.Graphite,
-            unfocusedSupportingTextColor = KejingColors.Graphite,
-            errorSupportingTextColor = KejingColors.Orange,
-            cursorColor = KejingColors.Orange,
-            errorCursorColor = KejingColors.Orange,
+            focusedTextColor = KejingColors.Ink,
+            unfocusedTextColor = KejingColors.Ink,
+            focusedContainerColor = Color.Transparent,
+            unfocusedContainerColor = Color.Transparent,
+            focusedBorderColor = KejingColors.Ink,
+            unfocusedBorderColor = KejingColors.Ink.copy(alpha = 0.45f),
+            focusedLabelColor = KejingColors.Ink,
+            unfocusedLabelColor = KejingColors.Ink.copy(alpha = 0.68f),
+            cursorColor = KejingColors.Ink,
         ),
     )
-}
-
-private fun String.parseTimeOrNull(): LocalTime? {
-    val parts = split(":")
-    if (parts.size != 2) return null
-    val hour = parts[0].toIntOrNull() ?: return null
-    val minute = parts[1].toIntOrNull() ?: return null
-    return runCatching { LocalTime.of(hour, minute) }.getOrNull()
 }

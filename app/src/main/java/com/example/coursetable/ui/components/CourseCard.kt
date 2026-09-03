@@ -23,10 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
 import com.example.coursetable.core.design.CoursePalette
 import com.example.coursetable.core.design.palette
@@ -101,8 +99,6 @@ private fun CourseCardContent(
                     },
                     color = palette.content,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = if (compact) 2 else 3,
-                    overflow = TextOverflow.Ellipsis,
                     letterSpacing = 0.sp,
                 )
                 Text(
@@ -116,7 +112,7 @@ private fun CourseCardContent(
             Spacer(Modifier.width(12.dp))
             Box(
                 modifier = Modifier
-                    .background(KejingColors.Graphite, KejingShape.Control)
+                    .background(palette.content.copy(alpha = 0.18f), KejingShape.Control)
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -125,7 +121,6 @@ private fun CourseCardContent(
                     color = palette.content,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
                 )
             }
         }
@@ -180,8 +175,6 @@ private fun MetadataRow(
             text = text,
             style = MaterialTheme.typography.bodySmall,
             color = palette.support,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }

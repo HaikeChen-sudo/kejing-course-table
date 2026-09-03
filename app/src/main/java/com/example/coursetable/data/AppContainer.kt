@@ -1,6 +1,7 @@
 package com.example.coursetable.data
 
 import android.content.Context
+import com.example.coursetable.data.local.LocalMemoStore
 import com.example.coursetable.data.local.LocalScheduleFileStore
 import com.example.coursetable.data.local.ManualPortalPageStore
 import com.example.coursetable.data.remote.AcademicPortalClient
@@ -14,6 +15,7 @@ class AppContainer(context: Context) {
     private val fileStore = LocalScheduleFileStore(context)
 
     val scheduleRepository: ScheduleRepository = FileBackedScheduleRepository(fileStore)
+    val memoStore = LocalMemoStore(context)
     val manualPortalPageStore = ManualPortalPageStore(context)
     val manualPortalScheduleParser = ManualPortalScheduleParser()
     val portalClient: AcademicPortalClient = AdapterBackedAcademicPortalClient(

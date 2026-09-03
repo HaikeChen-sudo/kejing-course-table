@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,11 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
+import com.example.coursetable.core.design.kejingGradientBackground
 import com.example.coursetable.core.design.palette
 import com.example.coursetable.domain.model.Course
 import com.example.coursetable.ui.components.EmptyState
@@ -70,16 +71,16 @@ fun CourseDetailScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = KejingColors.Ink,
-        contentColor = KejingColors.Porcelain,
+        containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+        contentColor = KejingColors.Ink,
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp),
+                windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = KejingColors.Ink,
-                    titleContentColor = KejingColors.Porcelain,
-                    navigationIconContentColor = KejingColors.Orange,
-                    actionIconContentColor = KejingColors.Orange,
+                    containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+                    titleContentColor = KejingColors.Ink,
+                    navigationIconContentColor = KejingColors.Ink,
+                    actionIconContentColor = KejingColors.Ink,
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -102,8 +103,12 @@ fun CourseDetailScreen(
             EmptyState(
                 title = "没有找到这门课",
                 subtitle = "课程可能已经被删除或当前学期已切换",
+                iconColor = KejingColors.Ink,
+                titleColor = KejingColors.Ink,
+                subtitleColor = KejingColors.Ink.copy(alpha = 0.68f),
                 modifier = Modifier
                     .fillMaxSize()
+                    .kejingGradientBackground()
                     .padding(paddingValues)
                     .padding(20.dp),
             )
@@ -113,6 +118,7 @@ fun CourseDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .kejingGradientBackground()
                 .padding(paddingValues),
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -173,8 +179,6 @@ private fun CourseHero(course: Course) {
                 color = palette.accent,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.sp,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = "${course.dayOfWeek.zhShortName()} · ${course.startTime.format(TimeFormatter)}-${course.endTime.format(TimeFormatter)}",
@@ -190,8 +194,8 @@ private fun CourseHero(course: Course) {
 private fun DetailRow(label: String, value: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = KejingColors.Black,
-        contentColor = KejingColors.Porcelain,
+        color = KejingColors.CanvasTop,
+        contentColor = KejingColors.Ink,
         shape = KejingShape.Control,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -204,13 +208,13 @@ private fun DetailRow(label: String, value: String) {
                 text = label,
                 modifier = Modifier.weight(0.34f),
                 style = MaterialTheme.typography.labelLarge,
-                color = KejingColors.Graphite,
+                color = KejingColors.Ink.copy(alpha = 0.68f),
             )
             Text(
                 text = value,
                 modifier = Modifier.weight(0.66f),
                 style = MaterialTheme.typography.bodyLarge,
-                color = KejingColors.Porcelain,
+                color = KejingColors.Ink,
                 fontWeight = FontWeight.Medium,
             )
         }
@@ -225,6 +229,9 @@ private fun DeleteCourseDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KejingColors.CanvasBottom,
+        titleContentColor = KejingColors.Ink,
+        textContentColor = KejingColors.Ink,
         title = { Text("删除课程") },
         text = { Text("确定删除「$courseName」吗？删除后会从当前学期课表中移除。") },
         confirmButton = {

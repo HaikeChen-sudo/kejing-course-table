@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.core.design.KejingShape
+import com.example.coursetable.core.design.kejingGradientBackground
 import com.example.coursetable.domain.model.ImportMode
 import com.example.coursetable.domain.model.SemesterSchedule
 import com.example.coursetable.ui.ScheduleUiState
@@ -69,11 +72,18 @@ fun SemesterManagerScreen(
     onMessageShown: () -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    var snackbarMessage by remember { mutableStateOf<String?>(null) }
     var pendingDeleteSemester by remember { mutableStateOf<SemesterSchedule?>(null) }
     LaunchedEffect(uiState.message) {
-        uiState.message?.let {
-            snackbarHostState.showSnackbar(it)
+        uiState.message?.let { message ->
+            snackbarMessage = message
             onMessageShown()
+        }
+    }
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            snackbarMessage = null
         }
     }
 
@@ -98,16 +108,16 @@ fun SemesterManagerScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
-        containerColor = KejingColors.Ink,
-        contentColor = KejingColors.Porcelain,
+        containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+        contentColor = KejingColors.Ink,
         topBar = {
             TopAppBar(
-                windowInsets = WindowInsets(0.dp),
+                windowInsets = WindowInsets.statusBars,
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = KejingColors.Ink,
-                    titleContentColor = KejingColors.Porcelain,
-                    navigationIconContentColor = KejingColors.Orange,
-                    actionIconContentColor = KejingColors.Orange,
+                    containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
+                    titleContentColor = KejingColors.Ink,
+                    navigationIconContentColor = KejingColors.Ink,
+                    actionIconContentColor = KejingColors.Ink,
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -125,11 +135,21 @@ fun SemesterManagerScreen(
                 },
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { snackbarData ->
+                Snackbar(
+                    snackbarData = snackbarData,
+                    containerColor = KejingColors.CanvasBottom,
+                    contentColor = KejingColors.Ink,
+                    actionColor = KejingColors.Ink,
+                )
+            }
+        },
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .kejingGradientBackground()
                 .padding(paddingValues),
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -138,28 +158,26 @@ fun SemesterManagerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(KejingColors.Black, KejingShape.Widget)
-                        .border(1.dp, KejingColors.Graphite, KejingShape.Widget)
-                        .padding(20.dp),
+                        .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(
                         text = "课表文件夹",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = KejingColors.Porcelain,
+                        color = KejingColors.Ink,
                     )
                     Text(
                         text = "每个学期独立保存，当前选中项会用于首页展示",
                         style = MaterialTheme.typography.bodySmall,
-                        color = KejingColors.Graphite,
+                        color = KejingColors.Ink.copy(alpha = 0.68f),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(
                             onClick = onOpenPortalWebLogin,
                             colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = KejingColors.Graphite,
-                                contentColor = KejingColors.Black,
+                                containerColor = KejingColors.CanvasBottom,
+                                contentColor = KejingColors.Ink,
                             ),
                         ) {
                             Icon(
@@ -201,12 +219,9 @@ fun SemesterManagerScreen(
                 val selected = semester.id == uiState.selectedSemester?.id
                 Surface(
                     onClick = { onSelectSemester(semester.id) },
-                    color = if (selected) {
-                        KejingColors.Graphite
-                    } else {
-                        KejingColors.Black
-                    },
-                    contentColor = if (selected) KejingColors.Black else KejingColors.Porcelain,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = KejingColors.CanvasTop,
+                    contentColor = KejingColors.Ink,
                     shape = KejingShape.Card,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
@@ -214,14 +229,13 @@ fun SemesterManagerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, if (selected) KejingColors.Paper else KejingColors.Graphite, KejingShape.Card)
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         Surface(
-                            color = if (selected) KejingColors.Black else KejingColors.Ink,
-                            contentColor = KejingColors.Orange,
+                            color = KejingColors.CanvasBottom,
+                            contentColor = KejingColors.Ink,
                             shape = KejingShape.Control,
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp,
@@ -239,13 +253,13 @@ fun SemesterManagerScreen(
                             Text(
                                 text = semester.displayName,
                                 style = MaterialTheme.typography.titleMedium,
-                                color = if (selected) KejingColors.Black else KejingColors.Porcelain,
+                                color = KejingColors.Ink,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
                                 text = "${semester.folderName} · ${semester.courses.size} 门课",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (selected) KejingColors.Ink else KejingColors.Graphite,
+                                color = KejingColors.Ink.copy(alpha = 0.68f),
                             )
                         }
                         if (selected) {
@@ -284,6 +298,9 @@ private fun ImportModeDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KejingColors.CanvasBottom,
+        titleContentColor = KejingColors.Ink,
+        textContentColor = KejingColors.Ink,
         title = { Text("导入新课表") },
         text = {
             Text("从教务系统同步后，可以覆盖当前学期，也可以新建一个独立文件夹保存。")
@@ -330,6 +347,9 @@ private fun DeleteSemesterDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KejingColors.CanvasBottom,
+        titleContentColor = KejingColors.Ink,
+        textContentColor = KejingColors.Ink,
         title = { Text("删除课表文件夹") },
         text = {
             Text(
