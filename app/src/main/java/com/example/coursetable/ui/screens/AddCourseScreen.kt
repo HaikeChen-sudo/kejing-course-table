@@ -265,7 +265,7 @@ private fun FormLabel(text: String) {
 }
 
 @Composable
-private fun NumberWheel(
+internal fun NumberWheel(
     label: String,
     value: Int,
     range: IntRange,
@@ -297,13 +297,16 @@ private fun NumberWheel(
                 }
             },
             update = { picker ->
-                picker.displayedValues = null
-                picker.minValue = range.first
-                picker.maxValue = range.last
-                picker.setFormatter { number -> itemText(number) }
-                picker.value = value.coerceIn(range)
+                val labels = range.map(itemText).toTypedArray()
+                if (picker.minValue != range.first || picker.maxValue != range.last ||
+                    picker.displayedValues?.contentEquals(labels) != true) {
+                    picker.displayedValues = null
+                    picker.minValue = range.first
+                    picker.maxValue = range.last
+                    picker.displayedValues = labels
+                }
+                if (picker.value != value.coerceIn(range)) picker.value = value.coerceIn(range)
                 picker.setOnValueChangedListener { _, _, newValue -> onValueChange(newValue) }
-                picker.setWheelTextColor(AndroidColor.BLACK)
             },
         )
     }
@@ -329,7 +332,7 @@ private fun NumberPicker.setWheelTextColor(color: Int) {
 }
 
 @Composable
-private fun IndustrialTextField(
+internal fun IndustrialTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,

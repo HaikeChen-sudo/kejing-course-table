@@ -10,6 +10,7 @@ data class SemesterSchedule(
     val totalWeeks: Int,
     val semesterStartDate: LocalDate? = null,
     val courses: List<Course>,
+    val customStartDate: Boolean = false,
 )
 
 enum class ImportMode {

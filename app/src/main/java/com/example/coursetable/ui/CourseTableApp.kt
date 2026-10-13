@@ -9,6 +9,9 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.lifecycle.Lifecycle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +51,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +81,8 @@ import com.example.coursetable.core.design.KejingColors
 import com.example.coursetable.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.coursetable.domain.model.dateOf
+import com.example.coursetable.ui.screens.MoveCourseScreen
 
 private sealed class AppRoute(val value: String, val label: String) {
     data object Today : AppRoute("today", "今日")
@@ -125,11 +134,11 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
     val splashProgress = remember { Animatable(0f) }
     val revealAlpha = remember { Animatable(1f) }
     // 内容揭示触发器：标题移动后半段置 1，TodayScreen 据此做克制 staggered fade-in
-    var homeContentTick by remember { mutableStateOf(0) }
+    var homeContentTick by rememberSaveable { mutableStateOf(0) }
     // 用 rememberUpdatedState 让协程读到最新的数据状态，避免捕获旧快照
     val dataReady by rememberUpdatedState(uiState.selectedSemester != null)
-    LaunchedEffect(homeTitleBounds, splashTitleBounds) {
-        if (homeTitleBounds == null || splashTitleBounds == null) return@LaunchedEffect
+    LaunchedEffect(homeTitleBounds != null && splashTitleBounds != null) {
+        if (!splashVisible || homeTitleBounds == null || splashTitleBounds == null) return@LaunchedEffect
         delay(120) // 阶段一：中央稳定，保证首帧
         // 阶段二：标题平移到主页标题位置（与数据加载并行，不等待数据）
         // 标题移动后半段触发首页内容 staggered fade-in（只改透明度，克制快速）
@@ -152,20 +161,35 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
     val bottomRoutes = listOf(AppRoute.Today, AppRoute.Week, AppRoute.Memo)
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
-    val showBottomBar = bottomRoutes.any { route ->
-        currentDestination?.hierarchy?.any { it.route == route.value } == true
+    var selectedTab by rememberSaveable { mutableStateOf(AppRoute.Today.value) }
+    var prepareWeek by remember { mutableStateOf(false) }
+    LaunchedEffect(splashVisible) {
+        if (!splashVisible) {
+            delay(100)
+            prepareWeek = true
+        }
+    }
+    var importMessage by remember { mutableStateOf<String?>(null) }
+    val mainRoute = currentDestination?.route in bottomRoutes.map { it.value }
+    LaunchedEffect(currentDestination?.route) {
+        if (mainRoute) selectedTab = currentDestination!!.route!!
+    }
+    fun openPage(route: String) {
+        if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+            navController.navigate(route) { launchSingleTop = true }
+        }
+    }
+    fun goBack() {
+        if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+            navController.popBackStack()
+        }
     }
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(gradientBrush),
     ) {
-        Scaffold(
-            contentWindowInsets = WindowInsets(0.dp),
-            containerColor = KejingColors.CanvasTop.copy(alpha = 0f),
-            contentColor = KejingColors.Ink,
-            bottomBar = {
-            if (showBottomBar) {
+        val bottomBar: @Composable () -> Unit = {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -191,9 +215,7 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             bottomRoutes.forEach { route ->
-                                val selected = currentDestination
-                                    ?.hierarchy
-                                    ?.any { it.route == route.value } == true
+                                val selected = selectedTab == route.value
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
@@ -201,7 +223,7 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
                                             if (route == AppRoute.Today) {
                                                 viewModel.resetToCurrentWeek()
                                             }
-                                            val alreadyOnRoute = currentDestination
+                                            val alreadyOnRoute = navController.currentDestination
                                                 ?.hierarchy
                                                 ?.any { it.route == route.value } == true
                                             if (!alreadyOnRoute) {
@@ -244,15 +266,45 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
                         }
                     }
                 }
+        }
+        Box(Modifier.fillMaxSize()
+            .then(if (mainRoute) Modifier else Modifier.clearAndSetSemantics {})
+            .pointerInput(mainRoute) {
+                if (!mainRoute) awaitPointerEventScope {
+                    while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                }
+            }) {
+            TabPage(bottomBar) {
+                RetainedTab(selectedTab == AppRoute.Today.value) {
+                    TodayScreen(uiState = if (selectedTab == AppRoute.Today.value) uiState else uiState.copy(message = null),
+                        onOpenCourseDetail = { openPage(AppRoute.CourseDetail.createRoute(it)) },
+                        onMessageShown = viewModel::clearMessage,
+                        onTitleBounds = { homeTitleBounds = it }, contentRevealTick = homeContentTick)
+                }
+                RetainedTab(selectedTab == AppRoute.Week.value, preload = prepareWeek) {
+                    WeekScreen(uiState = if (selectedTab == AppRoute.Week.value) uiState else uiState.copy(message = null),
+                        onSelectDay = viewModel::selectDay, onSelectWeek = viewModel::selectWeek,
+                        onStartDateChange = viewModel::setStartDate,
+                        onPreviousWeek = viewModel::previousWeek, onNextWeek = viewModel::nextWeek,
+                        onResetToCurrentWeek = viewModel::resetToCurrentWeek,
+                        onOpenAddCourse = { openPage(AppRoute.AddCourse.value) },
+                        onOpenSemesterManager = { openPage(AppRoute.SemesterManager.value) },
+                        onOpenCourseDetail = { openPage(AppRoute.CourseDetail.createRoute(it)) },
+                        onMessageShown = viewModel::clearMessage, importSuccessMessage = importMessage,
+                        onImportSuccessMessageShown = { importMessage = null })
+                }
+                RetainedTab(selectedTab == AppRoute.Memo.value) {
+                    MemoScreen(memos = uiState.memos,
+                        onOpenMemo = { openPage(AppRoute.MemoEditor.createRoute(it)) },
+                        onCreateMemo = { openPage(AppRoute.MemoEditor.createRoute("new")) })
+                }
             }
-            },
-        ) { innerPadding ->
+        }
             NavHost(
             navController = navController,
             startDestination = AppRoute.Today.value,
             modifier = Modifier
-                .background(gradientBrush)
-                .padding(innerPadding),
+                .fillMaxSize(),
             enterTransition = { pushIn() },
             exitTransition = { pushOut() },
             popEnterTransition = { popIn() },
@@ -263,59 +315,27 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
                 enterTransition = { tabIn() },
                 exitTransition = { tabOut() },
                 popEnterTransition = { popIn() },
-                popExitTransition = { popOut() },
+                popExitTransition = { ExitTransition.None },
             ) {
-                TodayScreen(
-                    uiState = uiState,
-                    onOpenCourseDetail = { courseId ->
-                        navController.navigate(AppRoute.CourseDetail.createRoute(courseId))
-                    },
-                    onMessageShown = viewModel::clearMessage,
-                    onTitleBounds = { homeTitleBounds = it },
-                    contentRevealTick = homeContentTick,
-                )
             }
             composable(
                 route = AppRoute.Week.value,
                 enterTransition = { tabIn() },
                 exitTransition = { tabOut() },
                 popEnterTransition = { popIn() },
-                popExitTransition = { popOut() },
+                popExitTransition = { ExitTransition.None },
             ) { entry ->
-                val importSuccessMessage = remember(entry) {
-                    entry.savedStateHandle.remove<String>(ImportSuccessMessageKey)
+                LaunchedEffect(entry) {
+                    importMessage = entry.savedStateHandle.remove<String>(ImportSuccessMessageKey)
                 }
-                WeekScreen(
-                    uiState = uiState,
-                    onSelectDay = viewModel::selectDay,
-                    onPreviousWeek = viewModel::previousWeek,
-                    onNextWeek = viewModel::nextWeek,
-                    onResetToCurrentWeek = viewModel::resetToCurrentWeek,
-                    onOpenAddCourse = { navController.navigate(AppRoute.AddCourse.value) },
-                    onOpenSemesterManager = { navController.navigate(AppRoute.SemesterManager.value) },
-                    onOpenCourseDetail = { courseId ->
-                        navController.navigate(AppRoute.CourseDetail.createRoute(courseId))
-                    },
-                    onMessageShown = viewModel::clearMessage,
-                    importSuccessMessage = importSuccessMessage,
-                )
             }
             composable(
                 route = AppRoute.Memo.value,
                 enterTransition = { tabIn() },
                 exitTransition = { tabOut() },
                 popEnterTransition = { popIn() },
-                popExitTransition = { popOut() },
+                popExitTransition = { ExitTransition.None },
             ) {
-                MemoScreen(
-                    memos = uiState.memos,
-                    onOpenMemo = { memoId ->
-                        navController.navigate(AppRoute.MemoEditor.createRoute(memoId))
-                    },
-                    onCreateMemo = {
-                        navController.navigate(AppRoute.MemoEditor.createRoute("new"))
-                    },
-                )
             }
             composable(
                 route = AppRoute.MemoEditor.value,
@@ -325,9 +345,10 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
             ) { entry ->
                 val memoId = entry.arguments?.getString("memoId").orEmpty()
                 val memo = uiState.memos.firstOrNull { it.id == memoId }
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
                 MemoEditorScreen(
                     memo = memo,
-                    onBack = navController::popBackStack,
+                    onBack = ::goBack,
                     onSave = { title, content ->
                         viewModel.saveMemo(memo?.id, title, content)
                     },
@@ -336,28 +357,33 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
                         navController.popBackStack()
                     },
                 )
+                }
             }
             composable(AppRoute.AddCourse.value) {
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
                 AddCourseScreen(
                     uiState = uiState,
-                    onBack = navController::popBackStack,
+                    onBack = ::goBack,
                     onSave = viewModel::addManualCourse,
                 )
+                }
             }
             composable(AppRoute.SemesterManager.value) {
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
                 SemesterManagerScreen(
                     uiState = uiState,
-                    onBack = navController::popBackStack,
+                    onBack = ::goBack,
                     onSelectSemester = viewModel::selectSemester,
                     onImportClick = viewModel::openImportDialog,
                     onOpenPortalWebLogin = {
-                        navController.navigate(AppRoute.SchoolSelect.value)
+                        openPage(AppRoute.SchoolSelect.value)
                     },
                     onDeleteSemester = viewModel::deleteSemester,
                     onDismissImport = viewModel::dismissImportDialog,
                     onImport = viewModel::syncFromPortal,
                     onMessageShown = viewModel::clearMessage,
                 )
+                }
             }
             composable(
                 route = AppRoute.CourseDetail.value,
@@ -367,22 +393,39 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
             ) { entry ->
                 val courseId = entry.arguments?.getString("courseId").orEmpty()
                 val course = uiState.selectedSemester?.courses?.firstOrNull { it.id == courseId }
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
                 CourseDetailScreen(
                     course = course,
-                    onBack = navController::popBackStack,
+                    date = course?.let { uiState.selectedSemester?.dateOf(it) },
+                    onMove = { openPage("move_course/${Uri.encode(courseId)}") },
+                    onBack = ::goBack,
                     onDelete = { id ->
                         viewModel.deleteCourse(id)
                         navController.popBackStack()
                     },
                 )
+                }
+            }
+            composable("move_course/{courseId}", arguments = listOf(navArgument("courseId") { type = NavType.StringType })) { entry ->
+                val id = entry.arguments?.getString("courseId")
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
+                MoveCourseScreen(
+                    semester = uiState.selectedSemester,
+                    course = uiState.selectedSemester?.courses?.firstOrNull { it.id == id },
+                    onBack = ::goBack,
+                    onSave = viewModel::moveCourse,
+                )
+                }
             }
             composable(AppRoute.SchoolSelect.value) {
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
                 SchoolSelectScreen(
-                    onBack = navController::popBackStack,
+                    onBack = ::goBack,
                     onSchoolSelected = { schoolCode ->
-                        navController.navigate(AppRoute.PortalWebLogin.createRoute(schoolCode))
+                        openPage(AppRoute.PortalWebLogin.createRoute(schoolCode))
                     },
                 )
+                }
             }
             composable(
                 route = AppRoute.PortalWebLogin.value,
@@ -391,17 +434,18 @@ fun CourseTableApp(viewModel: ScheduleViewModel) {
                 ),
             ) { entry ->
                 val schoolCode = entry.arguments?.getString("schoolCode").orEmpty()
+                Box(Modifier.fillMaxSize().background(gradientBrush)) {
                 PortalWebLoginScreen(
-                    onBack = navController::popBackStack,
+                    onBack = ::goBack,
                     onCapturePage = { url, title, html ->
                         viewModel.captureManualPortalPage(url, title, html)
                         navController.popBackStack()
                     },
                     schoolCode = schoolCode,
                 )
+                }
             }
             }
-        }
 
         if (splashVisible) {
             SplashOverlay(
@@ -434,10 +478,10 @@ private fun SplashOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(gradientBrush)
                 .graphicsLayer {
                     alpha = revealAlpha.value
-                },
+                }
+                .background(gradientBrush),
         )
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -464,9 +508,31 @@ private fun SplashOverlay(
 }
 
 // 底栏切页不保留旧页面做淡入淡出，避免周课表和其他页面在同一帧重复绘制。
-private fun pushIn(): EnterTransition = fadeIn(tween(140))
-private fun pushOut(): ExitTransition = fadeOut(tween(100))
-private fun popIn(): EnterTransition = fadeIn(tween(140))
-private fun popOut(): ExitTransition = fadeOut(tween(100))
-private fun tabIn(): EnterTransition = fadeIn(tween(140), initialAlpha = 0.72f)
-private fun tabOut(): ExitTransition = fadeOut(tween(100), targetAlpha = 0.72f)
+private fun pushIn(): EnterTransition = slideInHorizontally(tween(240)) { it }
+private fun pushOut(): ExitTransition = ExitTransition.None
+private fun popIn(): EnterTransition = EnterTransition.None
+private fun popOut(): ExitTransition = slideOutHorizontally(tween(240)) { it }
+private fun tabIn(): EnterTransition = EnterTransition.None
+private fun tabOut(): ExitTransition = ExitTransition.None
+
+@Composable
+private fun TabPage(bottomBar: @Composable () -> Unit, content: @Composable () -> Unit) {
+    // 底栏归属当前页面，随页面一起被覆盖，不在路由变化时提前改变内容高度。
+    Scaffold(contentWindowInsets = WindowInsets(0.dp), containerColor = KejingColors.CanvasTop,
+        bottomBar = bottomBar) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) { content() }
+    }
+}
+
+@Composable
+private fun RetainedTab(visible: Boolean, preload: Boolean = false, content: @Composable () -> Unit) {
+    var visited by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(visible) { if (visible) visited = true }
+    if (visible || visited || preload) {
+        // 保留已访问页的排版和滚动状态；未选中的页不放置，不绘制，也不接收触摸。
+        Box(Modifier.fillMaxSize().layout { measurable, constraints ->
+            val page = measurable.measure(constraints)
+            layout(page.width, page.height) { if (visible) page.place(0, 0) }
+        }) { content() }
+    }
+}

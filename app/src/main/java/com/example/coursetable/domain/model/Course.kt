@@ -13,6 +13,7 @@ data class Course(
     val teacher: String,
     val weeks: IntRange,
     val colorSeed: CourseColorSeed,
+    val scheduledDate: java.time.LocalDate? = null,
 )
 
 enum class CourseColorSeed {

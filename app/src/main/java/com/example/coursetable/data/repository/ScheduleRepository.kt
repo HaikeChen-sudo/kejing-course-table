@@ -14,4 +14,6 @@ interface ScheduleRepository {
     suspend fun addCourseToSelected(course: Course): Boolean
     suspend fun deleteCourseFromSelected(courseId: String): Boolean
     suspend fun deleteSchedule(id: String): Boolean
+    suspend fun setStartDate(semesterId: String, date: java.time.LocalDate)
+    suspend fun moveCourse(semesterId: String, courseId: String, date: java.time.LocalDate, start: java.time.LocalTime, end: java.time.LocalTime, location: String)
 }

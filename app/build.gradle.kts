@@ -15,12 +15,25 @@ android {
         applicationId = "com.example.coursetable"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "0.1.34"
+        versionCode = 58
+        versionName = "0.1.58"
     }
 
     buildFeatures {
         compose = true
+    }
+
+    buildTypes {
+        create("performance") {
+            initWith(getByName("release"))
+            // 本机优化包沿用已安装版本的签名，升级不需要卸载或清空课表。
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            matchingFallbacks += "release"
+        }
     }
 
     compileOptions {

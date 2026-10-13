@@ -22,6 +22,7 @@ internal fun ScheduleParseResult.withNcstAcademicCalendar(
 }
 
 internal fun SemesterSchedule.withKnownNcstTermStartDate(): SemesterSchedule {
+    if (customStartDate) return this
     if (!folderName.startsWith("manual_ncst-portal")) return this
     val startDate = displayName.ncstTermKey()?.let(knownNcstTermStarts::get) ?: return this
     val firstCourseWeek = firstScheduledWeek()

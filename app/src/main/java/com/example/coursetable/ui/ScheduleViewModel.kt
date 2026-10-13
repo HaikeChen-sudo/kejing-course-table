@@ -14,6 +14,8 @@ import com.example.coursetable.domain.model.ImportMode
 import com.example.coursetable.domain.model.Memo
 import com.example.coursetable.domain.model.ScheduleDefaults
 import com.example.coursetable.domain.model.SemesterSchedule
+import com.example.coursetable.domain.model.dateOf
+import com.example.coursetable.domain.model.weekAt
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -36,6 +38,7 @@ data class ScheduleUiState(
     val weekStartDate: LocalDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)),
     val todayCourses: List<Course> = emptyList(),
     val weekCourses: Map<DayOfWeek, List<Course>> = emptyMap(),
+    val coursesByDate: Map<LocalDate, List<Course>> = emptyMap(),
     val memos: List<Memo> = emptyList(),
     val isImportDialogOpen: Boolean = false,
     val isSyncing: Boolean = false,
@@ -55,6 +58,8 @@ class ScheduleViewModel(
     private val memos = MutableStateFlow<List<Memo>>(emptyList())
     private val _uiState = MutableStateFlow(ScheduleUiState())
     val uiState: StateFlow<ScheduleUiState> = _uiState.asStateFlow()
+    private var indexedSemester: SemesterSchedule? = null
+    private var dateIndex: Map<LocalDate, List<Course>> = emptyMap()
 
     init {
         viewModelScope.launch {
@@ -73,7 +78,16 @@ class ScheduleViewModel(
                 val selected = semesters.firstOrNull { it.id == selectedSemesterId }
                     ?: semesters.firstOrNull()
                 val totalWeeks = selected?.totalWeeks?.coerceAtLeast(1) ?: 1
-                val actualCurrentWeek = selected?.actualWeekForToday()
+                if (selected != indexedSemester) {
+                    dateIndex = selected?.let { semester ->
+                        semester.courses.mapNotNull { course ->
+                            semester.dateOf(course)?.takeIf { course.scheduledDate != null || semester.semesterStartDate == null || it >= semester.semesterStartDate }
+                                ?.let { it to course }
+                        }.groupBy({ it.first }, { it.second }).mapValues { (_, courses) -> courses.sortedBy { it.startTime } }
+                    }.orEmpty()
+                    indexedSemester = selected
+                }
+                val actualCurrentWeek = selected?.weekAt(LocalDate.now())
                 val currentWeek = actualCurrentWeek
                     ?.coerceIn(1, totalWeeks)
                     ?: selected?.currentWeek?.coerceIn(1, totalWeeks)
@@ -93,22 +107,10 @@ class ScheduleViewModel(
                     currentWeek = currentWeek,
                     selectedWeek = selectedWeek,
                     weekStartDate = weekStartDate,
-                    todayCourses = selected
-                        ?.courses
-                        ?.filter {
-                            it.dayOfWeek == LocalDate.now().dayOfWeek &&
-                                actualCurrentWeek != null &&
-                                actualCurrentWeek in 1..totalWeeks &&
-                                actualCurrentWeek in it.weeks
-                        }
-                        ?.sortedBy { it.startTime }
-                        .orEmpty(),
+                    coursesByDate = dateIndex,
+                    todayCourses = dateIndex[LocalDate.now()].orEmpty(),
                     weekCourses = DayOfWeek.entries.associateWith { day ->
-                        selected
-                            ?.courses
-                            ?.filter { it.dayOfWeek == day && selectedWeek in it.weeks }
-                            ?.sortedBy { it.startTime }
-                            .orEmpty()
+                        dateIndex[weekStartDate.plusDays((day.value - 1).toLong())].orEmpty()
                     },
                     memos = memos,
                     isImportDialogOpen = _uiState.value.isImportDialogOpen,
@@ -146,6 +148,23 @@ class ScheduleViewModel(
     fun resetToCurrentWeek() {
         selectedWeekOverride.value = null
     }
+
+    fun selectWeek(week: Int) {
+        selectedWeekOverride.value = week.coerceIn(1, _uiState.value.selectedSemester?.totalWeeks ?: 1)
+    }
+
+    fun setStartDate(date: LocalDate) {
+        val semesterId = _uiState.value.selectedSemester?.id ?: return
+        viewModelScope.launch {
+            runCatching { repository.setStartDate(semesterId, date) }
+                .onSuccess { selectedWeekOverride.value = null }
+                .onFailure { _uiState.value = _uiState.value.copy(message = it.message ?: "保存失败") }
+        }
+    }
+
+    suspend fun moveCourse(semesterId: String, id: String, date: LocalDate, start: LocalTime, end: LocalTime, location: String): String? =
+        runCatching { repository.moveCourse(semesterId, id, date, start, end, location) }
+            .exceptionOrNull()?.let { it.message ?: "保存失败" }
 
     fun saveMemo(id: String?, title: String, content: String) {
         viewModelScope.launch {
@@ -398,13 +417,6 @@ internal fun consumeMessage(state: ScheduleUiState): ScheduleUiState = state.cop
 
 internal fun upsertMemo(existing: List<Memo>, memo: Memo): List<Memo> =
     (existing.filterNot { it.id == memo.id } + memo).sortedByDescending(Memo::updatedAtMillis)
-
-private fun SemesterSchedule.actualWeekForToday(): Int? {
-    val startDate = semesterStartDate ?: return currentWeek
-    val todayWeekStart = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    val firstTeachingWeek = startDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    return (java.time.temporal.ChronoUnit.WEEKS.between(firstTeachingWeek, todayWeekStart) + 1).toInt()
-}
 
 private fun Int.absoluteValue(): Int {
     return if (this == Int.MIN_VALUE) 0 else kotlin.math.abs(this)

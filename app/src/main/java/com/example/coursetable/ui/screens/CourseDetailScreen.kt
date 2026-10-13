@@ -55,6 +55,8 @@ fun CourseDetailScreen(
     course: Course?,
     onBack: () -> Unit,
     onDelete: (String) -> Unit,
+    onMove: () -> Unit = {},
+    date: java.time.LocalDate? = null,
 ) {
     var showDeleteDialog by remember(course?.id) { mutableStateOf(false) }
 
@@ -131,9 +133,16 @@ fun CourseDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     DetailRow(label = "上课时间", value = course.timeText())
-                    DetailRow(label = "周次", value = course.weeksText())
+                    date?.let { DetailRow(label = "日期", value = it.toString()) }
+                    if (course.scheduledDate == null) DetailRow(label = "周次", value = course.weeksText())
                     DetailRow(label = "上课地点", value = course.location)
                     DetailRow(label = "任课教师", value = course.teacher)
+                }
+            }
+            item {
+                Button(onClick = onMove, modifier = Modifier.fillMaxWidth(), shape = KejingShape.Control,
+                    colors = ButtonDefaults.buttonColors(containerColor = KejingColors.Orange, contentColor = KejingColors.Ink)) {
+                    Text("调整这次课的日期、节次和地点")
                 }
             }
             item {
@@ -151,7 +160,7 @@ fun CourseDetailScreen(
                         contentDescription = null,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("删除课程")
+                    Text("删除这次课程")
                 }
             }
         }
@@ -233,7 +242,7 @@ private fun DeleteCourseDialog(
         titleContentColor = KejingColors.Ink,
         textContentColor = KejingColors.Ink,
         title = { Text("删除课程") },
-        text = { Text("确定删除「$courseName」吗？删除后会从当前学期课表中移除。") },
+        text = { Text("确定删除这一次「$courseName」吗？其他日期的同名课程保留。") },
         confirmButton = {
             Button(
                 onClick = onConfirm,

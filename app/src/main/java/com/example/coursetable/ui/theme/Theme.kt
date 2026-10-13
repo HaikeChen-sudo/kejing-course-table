@@ -2,12 +2,12 @@ package com.example.coursetable.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import com.example.coursetable.core.design.KejingColors
 
-private val DarkScheme = darkColorScheme(
+private val KejingScheme = lightColorScheme(
     primary = KejingColors.Ink,
     onPrimary = KejingColors.CanvasTop,
     primaryContainer = KejingColors.CanvasBottom,
@@ -25,6 +25,13 @@ private val DarkScheme = darkColorScheme(
     surfaceVariant = KejingColors.CanvasBottom,
     onSurfaceVariant = KejingColors.Ink,
     surfaceTint = KejingColors.Ink,
+    surfaceDim = KejingColors.CanvasBottom,
+    surfaceBright = KejingColors.CanvasTop,
+    surfaceContainerLowest = KejingColors.CanvasTop,
+    surfaceContainerLow = KejingColors.Paper,
+    surfaceContainer = KejingColors.Paper,
+    surfaceContainerHigh = KejingColors.Paper,
+    surfaceContainerHighest = KejingColors.CanvasBottom,
     inverseSurface = KejingColors.Ink,
     inverseOnSurface = KejingColors.CanvasTop,
     inversePrimary = KejingColors.CanvasBottom,
@@ -51,7 +58,7 @@ fun CourseTableTheme(
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = DarkScheme,
+        colorScheme = KejingScheme,
         typography = MaterialTheme.typography,
         shapes = AppShapes,
         content = content,

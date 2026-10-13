@@ -8,6 +8,11 @@ import com.example.coursetable.domain.model.ImportMode
 import com.example.coursetable.domain.model.ScheduleDefaults
 import com.example.coursetable.domain.model.SemesterSchedule
 import com.example.coursetable.domain.model.withDistinctColorSeeds
+import com.example.coursetable.domain.model.withIndividualSessions
+import com.example.coursetable.domain.model.sessions
+import com.example.coursetable.domain.model.moveSession
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -25,6 +30,7 @@ class FileBackedScheduleRepository(
     private val fileStore: LocalScheduleFileStore,
 ) : ScheduleRepository {
     private val ioDispatcher = Dispatchers.IO
+    private val editMutex = Mutex()
     private val ioScope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val _schedules = MutableStateFlow<List<SemesterSchedule>>(emptyList())
     private val _selectedSemesterId = MutableStateFlow<String?>(null)
@@ -42,7 +48,7 @@ class FileBackedScheduleRepository(
             val schedules = loadedSchedules.map { schedule ->
                 schedule
                     .withKnownNcstTermStartDate()
-                    .withDistinctCourseColors()
+                    .withIndividualSessions()
             }
             schedules.zip(loadedSchedules)
                 .filter { (updated, previous) -> updated != previous }
@@ -66,7 +72,7 @@ class FileBackedScheduleRepository(
         val currentId = _selectedSemesterId.value
         val timestamp = System.currentTimeMillis()
         var importedSchedule: SemesterSchedule? = null
-        val normalizedSchedule = schedule.normalizedForImport()
+        val normalizedSchedule = schedule.normalizedForImport().withIndividualSessions()
         val nextSchedules = when (mode) {
             ImportMode.OverwriteCurrent -> {
                 _schedules.value.map {
@@ -110,7 +116,7 @@ class FileBackedScheduleRepository(
                     totalWeeks = schedule.totalWeeks
                         .coerceAtLeast(ScheduleDefaults.TOTAL_WEEKS)
                         .coerceAtLeast(course.weeks.last),
-                    courses = (schedule.courses + course).sortedWith(
+                    courses = (schedule.courses + course.sessions()).sortedWith(
                         compareBy<Course> { it.dayOfWeek.value }
                             .thenBy { it.startTime }
                             .thenBy { it.name },
@@ -166,6 +172,23 @@ class FileBackedScheduleRepository(
             wasDeleted
         }
         return deleted
+    }
+
+    override suspend fun setStartDate(semesterId: String, date: LocalDate) = editSchedule(semesterId) {
+        it.copy(semesterStartDate = date, customStartDate = true)
+    }
+
+    override suspend fun moveCourse(semesterId: String, courseId: String, date: LocalDate, start: LocalTime, end: LocalTime, location: String) = editSchedule(semesterId) {
+        it.moveSession(courseId, date, start, end, location)
+    }
+
+    private suspend fun editSchedule(id: String, edit: (SemesterSchedule) -> SemesterSchedule) {
+        editMutex.withLock {
+            val previous = _schedules.value.firstOrNull { it.id == id } ?: error("学期已不存在")
+            val updated = edit(previous)
+            withContext(ioDispatcher) { fileStore.saveSchedule(updated) }
+            _schedules.value = _schedules.value.map { if (it.id == id) updated else it }
+        }
     }
 
     private fun seedSemester(): SemesterSchedule {

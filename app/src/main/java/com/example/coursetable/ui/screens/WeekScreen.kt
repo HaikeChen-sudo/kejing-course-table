@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -90,7 +91,12 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlin.math.abs
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.snapshotFlow
+import com.example.coursetable.ui.components.CalendarDateButton
 
 private val TimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val RealtimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
@@ -100,6 +106,8 @@ private val RealtimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 fun WeekScreen(
     uiState: ScheduleUiState,
     onSelectDay: (DayOfWeek) -> Unit,
+    onSelectWeek: (Int) -> Unit,
+    onStartDateChange: (LocalDate) -> Unit,
     onPreviousWeek: () -> Unit,
     onNextWeek: () -> Unit,
     onResetToCurrentWeek: () -> Unit,
@@ -123,6 +131,24 @@ fun WeekScreen(
         mutableFloatStateOf(preferences.getFloat("course_card_height", 84f))
     }
     var isDisplaySettingsOpen by rememberSaveable { mutableStateOf(false) }
+    val pagerState = rememberPagerState(initialPage = (uiState.selectedWeek - 1).coerceAtLeast(0)) {
+        uiState.selectedSemester?.totalWeeks?.coerceAtLeast(1) ?: 1
+    }
+    var preloadNeighbors by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // 先让进入页面的动画完成，再准备左右各一周，避免首次拖动才排版整页。
+        delay(300)
+        preloadNeighbors = true
+    }
+    LaunchedEffect(uiState.selectedSemester?.id, uiState.selectedWeek) {
+        if (!pagerState.isScrollInProgress && pagerState.currentPage != uiState.selectedWeek - 1) {
+            pagerState.scrollToPage((uiState.selectedWeek - 1).coerceIn(0, pagerState.pageCount - 1))
+        }
+    }
+    LaunchedEffect(pagerState) {
+        // 恢复页面时先服从已选周次，不能把保存的旧页码反写回去。
+        snapshotFlow { pagerState.settledPage }.drop(1).collect { onSelectWeek(it + 1) }
+    }
     // 网格时间低频刷新（5 秒一次），避免整棵时间网格每秒重组
     val gridNow = rememberGridTime()
     val backgroundBrush = remember {
@@ -151,6 +177,8 @@ fun WeekScreen(
         WeekDisplaySettingsDialog(
             courseTextScale = courseTextScale,
             courseCardHeight = courseCardHeight,
+            startDate = uiState.selectedSemester?.semesterStartDate,
+            onStartDateChange = onStartDateChange,
             onTextScaleChange = {
                 courseTextScale = it
                 preferences.edit().putFloat("course_text_scale", it).apply()
@@ -178,7 +206,7 @@ fun WeekScreen(
                 title = {
                     Column {
                         Text(
-                            text = "第 ${uiState.selectedWeek} 周",
+                            text = "第 ${pagerState.currentPage + 1} 周",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,
                         )
@@ -233,16 +261,24 @@ fun WeekScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 8.dp),
         ) {
-            TimelineGrid(
-                uiState = uiState,
-                now = gridNow,
-                onSelectDay = onSelectDay,
-                onPreviousWeek = onPreviousWeek,
-                onNextWeek = onNextWeek,
-                onOpenCourseDetail = onOpenCourseDetail,
-                courseTextScale = courseTextScale,
-                courseCardHeight = courseCardHeight,
-            )
+            HorizontalPager(state = pagerState, beyondViewportPageCount = if (preloadNeighbors) 1 else 0,
+                key = { "${uiState.selectedSemester?.id}:$it" }) { page ->
+                val monday = uiState.weekStartDate.plusWeeks((page + 1 - uiState.selectedWeek).toLong())
+                val courses = remember(uiState.coursesByDate, monday) {
+                    DayOfWeek.entries.associateWith { day ->
+                        uiState.coursesByDate[monday.plusDays((day.value - 1).toLong())].orEmpty()
+                    }
+                }
+                TimelineGrid(
+                    uiState = uiState.copy(selectedWeek = page + 1, weekStartDate = monday, weekCourses = courses),
+                    now = gridNow,
+                    onSelectDay = onSelectDay,
+                    onOpenCourseDetail = onOpenCourseDetail,
+                    courseTextScale = courseTextScale,
+                    courseCardHeight = courseCardHeight,
+                    modifier = Modifier.graphicsLayer(),
+                )
+            }
         }
     }
 }
@@ -251,6 +287,8 @@ fun WeekScreen(
 private fun WeekDisplaySettingsDialog(
     courseTextScale: Float,
     courseCardHeight: Float,
+    startDate: LocalDate?,
+    onStartDateChange: (LocalDate) -> Unit,
     onTextScaleChange: (Float) -> Unit,
     onCardHeightChange: (Float) -> Unit,
     onDismiss: () -> Unit,
@@ -263,6 +301,8 @@ private fun WeekDisplaySettingsDialog(
         title = { Text("课表显示") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                CalendarDateButton("开学日期", startDate, onStartDateChange)
+                Text("所选日期是开学当天。第一教学周为该日期所在的周，周课表仍按周一至周日排列；开学前不显示常规课程。已单独调课的日期保留。", style = MaterialTheme.typography.bodySmall)
                 Text("课程字号 ${"%.0f".format(courseTextScale * 100)}%")
                 Slider(
                     value = courseTextScale,
@@ -300,8 +340,6 @@ private fun TimelineGrid(
     uiState: ScheduleUiState,
     now: LocalDateTime,
     onSelectDay: (DayOfWeek) -> Unit,
-    onPreviousWeek: () -> Unit,
-    onNextWeek: () -> Unit,
     onOpenCourseDetail: (String) -> Unit,
     courseTextScale: Float,
     courseCardHeight: Float,
@@ -309,27 +347,13 @@ private fun TimelineGrid(
 ) {
     val verticalScroll = rememberScrollState()
     val today = now.toLocalDate()
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    var pageWidth by remember { mutableIntStateOf(0) }
-    val canGoToPreviousWeek by rememberUpdatedState(uiState.selectedWeek > 1)
-    val canGoToNextWeek by rememberUpdatedState(
-        uiState.selectedWeek < (uiState.selectedSemester?.totalWeeks ?: 1),
-    )
-    val weekDragState = rememberDraggableState { delta ->
-        val limit = pageWidth.toFloat()
-        if (limit > 0f) {
-            val nextOffset = (dragOffset + delta).coerceIn(-limit, limit)
-            dragOffset = when {
-                nextOffset > 0f && !canGoToPreviousWeek -> 0f
-                nextOffset < 0f && !canGoToNextWeek -> 0f
-                else -> nextOffset
-            }
-        }
-    }
     val timeColumnWidth = 30.dp
     val slotHeight = courseCardHeight.dp
     val periodSlots = StandardPeriodSlots
     val totalHeight = slotHeight * periodSlots.size.toFloat()
+    val outsidePeriods = remember(uiState.weekCourses) {
+        uiState.weekCourses.values.flatten().filter { periodSlots.firstOverlappingSlotIndex(it) == null }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -370,62 +394,13 @@ private fun TimelineGrid(
         }
         BoxWithConstraints(
             modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { pageWidth = it.width }
-                .draggable(
-                    state = weekDragState,
-                    orientation = Orientation.Horizontal,
-                    onDragStopped = { velocity ->
-                        val width = pageWidth.toFloat()
-                        val shouldChangeWeek = abs(dragOffset) >= width * 0.16f || abs(velocity) >= 550f
-                        if (!shouldChangeWeek || width == 0f) {
-                            animate(
-                                initialValue = dragOffset,
-                                targetValue = 0f,
-                                animationSpec = tween(80),
-                            ) { value, _ -> dragOffset = value }
-                            return@draggable
-                        }
-
-                        val direction = if (dragOffset == 0f) {
-                            if (velocity > 0f) 1 else -1
-                        } else {
-                            if (dragOffset > 0f) 1 else -1
-                        }
-                        val canChangeWeek = if (direction > 0) {
-                            canGoToPreviousWeek
-                        } else {
-                            canGoToNextWeek
-                        }
-                        if (!canChangeWeek) {
-                            animate(
-                                initialValue = dragOffset,
-                                targetValue = 0f,
-                                animationSpec = tween(80),
-                            ) { value, _ -> dragOffset = value }
-                            return@draggable
-                        }
-                        animate(
-                            initialValue = dragOffset,
-                            targetValue = direction * width,
-                            animationSpec = tween(55),
-                        ) { value, _ -> dragOffset = value }
-                        if (direction > 0) onPreviousWeek() else onNextWeek()
-                        dragOffset = -direction * width
-                        animate(
-                            initialValue = dragOffset,
-                            targetValue = 0f,
-                            animationSpec = tween(95),
-                        ) { value, _ -> dragOffset = value }
-                    },
-                )
+                .fillMaxSize(),
         ) {
             // 七天共用一次约束测量，避免每列分别触发子组合布局。
             val dayWidth = ((maxWidth - timeColumnWidth - 14.dp) / 7).coerceAtLeast(0.dp)
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { translationX = dragOffset }
                     .verticalScroll(verticalScroll),
             ) {
                 Row(
@@ -441,7 +416,7 @@ private fun TimelineGrid(
                         periodSlots = periodSlots,
                     )
                     DayOfWeek.entries.forEach { day ->
-                    DayTimelineColumn(
+                        DayTimelineColumn(
                             date = uiState.weekStartDate.plusDays(
                                 (day.value - DayOfWeek.MONDAY.value).toLong(),
                             ),
@@ -456,6 +431,14 @@ private fun TimelineGrid(
                             columnWidth = dayWidth,
                             modifier = Modifier.width(dayWidth),
                         )
+                    }
+                }
+                if (outsidePeriods.isNotEmpty()) {
+                    Text("其他时间", modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.titleSmall)
+                    outsidePeriods.forEach { course ->
+                        TextButton(onClick = { onOpenCourseDetail(course.id) }) {
+                            Text("${course.dayOfWeek.zhShortName()} ${course.startTime}–${course.endTime}  ${course.name}")
+                        }
                     }
                 }
             }
@@ -624,7 +607,7 @@ private fun CourseBlock(
                     palette = palette,
                     status = status,
                     hasDepth = hasDepth,
-                    progress = progress.value,
+                    progress = { progress.value },
                     modifier = Modifier.matchParentSize(),
                 )
             }
@@ -669,11 +652,11 @@ private fun CourseMaterialOverlay(
     palette: com.example.coursetable.core.design.CoursePalette,
     status: WeekCourseStatus,
     hasDepth: Boolean,
-    progress: Float,
+    progress: () -> Float,
     modifier: Modifier,
 ) {
     Spacer(
-        modifier = modifier.drawWithCache {
+        modifier = modifier.clip(KejingShape.Control).drawWithCache {
             val corner = 6.dp.toPx()
             // 静态装饰（渐变、斜纹、圆角描边）只构建一次，随尺寸变化才重建
             val gradientBrush = Brush.linearGradient(
@@ -724,7 +707,7 @@ private fun CourseMaterialOverlay(
                 }
                 if (status is WeekCourseStatus.Active) {
                     // 裁圆角，让黑色进度块的顶部两角跟随课程块圆角
-                    val progressY = size.height * progress
+                    val progressY = size.height * progress()
                     drawContext.canvas.save()
                     drawContext.canvas.clipPath(progressPath)
                     drawRect(

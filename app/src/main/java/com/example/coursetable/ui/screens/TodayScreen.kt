@@ -51,6 +51,9 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -78,6 +81,15 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.delay
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.ui.layout.Layout
+import com.example.coursetable.domain.model.weekAt
 
 private val ClockFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
 private val CourseTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
@@ -101,17 +113,8 @@ fun TodayScreen(
     val nowDate = now.toLocalDate()
     val selectedSemester = uiState.selectedSemester
     // 今日课程按实时系统时间计算，改系统时间后立即生效
-    val todayCourses = remember(selectedSemester, nowDate) {
-        val week = currentWeekFor(selectedSemester, nowDate)
-        selectedSemester?.courses
-            ?.filter {
-                it.dayOfWeek == nowDate.dayOfWeek &&
-                    week != null &&
-                    week in 1..selectedSemester.totalWeeks &&
-                    week in it.weeks
-            }
-            ?.sortedBy { it.startTime }
-            .orEmpty()
+    val todayCourses = remember(uiState.coursesByDate, nowDate) {
+        uiState.coursesByDate[nowDate].orEmpty()
     }
     val currentWeek = currentWeekFor(selectedSemester, nowDate) ?: uiState.currentWeek
     val backgroundBrush = remember {
@@ -279,24 +282,11 @@ private fun TodayCourseCard(
     onClick: () -> Unit,
 ) {
     val state = course.timeStateAt(now)
+    val completed = state is TodayCourseState.Completed
+    var expanded by rememberSaveable(course.id, completed) { mutableStateOf(false) }
+    val compact = completed && !expanded
     // palette 按颜色种子缓存，避免每秒时钟刷新时整卡重复计算配色
     val palette = remember(course.colorSeed) { course.colorSeed.palette() }
-    // 只有进行中的课程才跑闪烁动画，其余卡片不消耗动画帧
-    val pulseAlpha = if (state is TodayCourseState.Active) {
-        val pulseTransition = rememberInfiniteTransition(label = "course pulse")
-        val alpha by pulseTransition.animateFloat(
-            initialValue = 0.34f,
-            targetValue = 0.88f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(1200, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "course pulse alpha",
-        )
-        alpha
-    } else {
-        0.8f
-    }
     val containerColor = when (state) {
         is TodayCourseState.Completed -> KejingColors.Black
         is TodayCourseState.Active -> palette.container
@@ -309,13 +299,13 @@ private fun TodayCourseCard(
     }
 
     Surface(
-        onClick = onClick,
+        onClick = { if (completed) expanded = !expanded else onClick() },
         modifier = Modifier.fillMaxWidth(),
         color = containerColor,
         contentColor = contentColor,
         shape = KejingShape.Card,
         border = if (state is TodayCourseState.Active) {
-            BorderStroke(1.dp, palette.accent.copy(alpha = pulseAlpha))
+            BorderStroke(1.dp, palette.accent.copy(alpha = 0.8f))
         } else {
             null
         },
@@ -366,6 +356,7 @@ private fun TodayCourseCard(
                 course = course,
                 contentColor = contentColor,
                 statusLabel = course.statusLabelAt(now, state),
+                compact = compact,
             )
         }
     }
@@ -376,45 +367,49 @@ private fun TodayCourseContent(
     course: Course,
     contentColor: Color,
     statusLabel: String?,
+    compact: Boolean,
 ) {
-    Column(
-        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = course.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = contentColor,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "${course.startTime.format(CourseTimeFormatter)}-${course.endTime.format(CourseTimeFormatter)}",
-                    color = contentColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
+    val progress = animateFloatAsState(if (compact) 1f else 0f, tween(240), label = "completed course")
+    // 字体只排版一次；缩放与平移在图层上进行，高度只由这一处动画控制。
+    Layout(content = {
+            Text(course.name, fontSize = 22.sp, fontWeight = FontWeight.SemiBold,
+                color = contentColor, maxLines = if (compact) 1 else 3, overflow = TextOverflow.Ellipsis)
+            val formatter = remember { DateTimeFormatter.ofPattern("H:mm") }
+            Text("${course.startTime.format(formatter)}–${course.endTime.format(formatter)}",
+                fontSize = 14.sp, color = contentColor)
+            Column(modifier = if (compact) Modifier.clearAndSetSemantics {} else Modifier,
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                statusLabel?.let { Text(it, color = contentColor, style = MaterialTheme.typography.labelMedium) }
+                TodayMetadataRow(Icons.Rounded.LocationOn, course.location, contentColor)
+                TodayMetadataRow(Icons.Rounded.Person, course.teacher, contentColor.copy(alpha = 0.84f))
             }
-            statusLabel?.let {
-                Text(
-                    text = it,
-                    color = contentColor,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+        }, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth().clipToBounds()) { measurables, constraints ->
+            val width = constraints.maxWidth
+            val time = measurables[1].measure(constraints.copy(minWidth = 0, minHeight = 0))
+            val gap = 12.dp.roundToPx()
+            val title = measurables[0].measure(constraints.copy(minWidth = 0, minHeight = 0,
+                maxWidth = if (compact) ((width - time.width * 12f / 14f - gap) / (15f / 22f)).toInt().coerceAtLeast(0) else width))
+            val details = measurables[2].measure(constraints.copy(minWidth = 0, minHeight = 0))
+            val p = progress.value
+            val titleScale = 1f - p * (1f - 15f / 22f)
+            val timeScale = 1f - p * (1f - 12f / 14f)
+            val headerHeight = title.height + 4.dp.roundToPx() + time.height
+            val expandedHeight = headerHeight + 8.dp.roundToPx() + details.height
+            val compactHeight = maxOf(title.height * 15f / 22f, time.height * 12f / 14f)
+            val height = (expandedHeight + (compactHeight - expandedHeight) * p).toInt()
+            layout(width, height) {
+                title.placeRelativeWithLayer(0, ((compactHeight - title.height * titleScale) / 2f * p).toInt()) {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = titleScale; scaleY = titleScale
+                }
+                time.placeRelativeWithLayer(((width - time.width * timeScale) * p).toInt(),
+                    ((title.height + 4.dp.roundToPx()) * (1f - p) + (compactHeight - time.height * timeScale) / 2f * p).toInt()) {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = timeScale; scaleY = timeScale
+                }
+                if (p < 1f) details.placeRelativeWithLayer(0, headerHeight + 8.dp.roundToPx()) { alpha = 1f - p }
             }
         }
-        TodayMetadataRow(Icons.Rounded.LocationOn, course.location, contentColor)
-        TodayMetadataRow(Icons.Rounded.Person, course.teacher, contentColor.copy(alpha = 0.84f))
-    }
 }
 
 @Composable
@@ -440,7 +435,9 @@ private fun StaggeredReveal(
 ) {
     val alpha = remember { Animatable(if (played) 1f else 0f) }
     LaunchedEffect(trigger) {
-        if (trigger > 0) {
+        if (played) {
+            alpha.snapTo(1f)
+        } else if (trigger > 0) {
             delay(delayMs)
             alpha.animateTo(1f, animationSpec = tween(220, easing = FastOutSlowInEasing))
         }
@@ -485,10 +482,6 @@ private fun rememberCurrentTime(): LocalDateTime {
     return now
 }
 
-/** 按给定日期实时推算当前教学周，与 ViewModel 里的 actualWeekForToday 逻辑一致。 */
 private fun currentWeekFor(semester: SemesterSchedule?, date: LocalDate): Int? {
-    val startDate = semester?.semesterStartDate ?: return semester?.currentWeek
-    val dateWeekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    val firstTeachingWeek = startDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    return (ChronoUnit.WEEKS.between(firstTeachingWeek, dateWeekStart) + 1).toInt()
+    return semester?.weekAt(date)
 }

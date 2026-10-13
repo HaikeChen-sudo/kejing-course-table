@@ -31,7 +31,10 @@ class LocalScheduleFileStore(context: Context) {
             .filter { it.isDirectory }
             .mapNotNull { folder ->
                 runCatching {
-                    scheduleFile(folder).takeIf { it.exists() }?.readText()?.let(::decodeSchedule)
+                    val file = scheduleFile(folder)
+                    if (file.exists() || File(file.path + ".bak").exists()) {
+                        android.util.AtomicFile(file).openRead().bufferedReader().use { decodeSchedule(it.readText()) }
+                    } else null
                 }.getOrNull()
             }
             .sortedBy { it.displayName }
@@ -40,7 +43,15 @@ class LocalScheduleFileStore(context: Context) {
     fun saveSchedule(schedule: SemesterSchedule) {
         val folder = semesterFolder(schedule.folderName)
         folder.mkdirs()
-        scheduleFile(folder).writeText(encodeSchedule(schedule))
+        val file = android.util.AtomicFile(scheduleFile(folder))
+        val stream = file.startWrite()
+        try {
+            stream.write(encodeSchedule(schedule).toByteArray(Charsets.UTF_8))
+            file.finishWrite(stream)
+        } catch (error: Exception) {
+            file.failWrite(stream)
+            throw error
+        }
     }
 
     fun deleteScheduleFolder(folderName: String): Boolean {
@@ -66,63 +77,69 @@ class LocalScheduleFileStore(context: Context) {
 
     private fun scheduleFile(folder: File): File = File(folder, "schedule.json")
 
-    private fun encodeSchedule(schedule: SemesterSchedule): String {
-        return JSONObject()
-            .put("id", schedule.id)
-            .put("displayName", schedule.displayName)
-            .put("folderName", schedule.folderName)
-            .put("currentWeek", schedule.currentWeek)
-            .put("totalWeeks", schedule.totalWeeks)
-            .put("semesterStartDate", schedule.semesterStartDate?.toString())
-            .put(
-                "courses",
-                JSONArray().apply {
-                    schedule.courses.forEach { course ->
-                        put(
-                            JSONObject()
-                                .put("id", course.id)
-                                .put("name", course.name)
-                                .put("dayOfWeek", course.dayOfWeek.name)
-                                .put("startTime", course.startTime.toString())
-                                .put("endTime", course.endTime.toString())
-                                .put("location", course.location)
-                                .put("teacher", course.teacher)
-                                .put("weekStart", course.weeks.first)
-                                .put("weekEnd", course.weeks.last)
-                                .put("colorSeed", course.colorSeed.name),
-                        )
-                    }
+    internal companion object {
+        fun encodeSchedule(schedule: SemesterSchedule): String {
+            return JSONObject()
+                .put("id", schedule.id)
+                .put("displayName", schedule.displayName)
+                .put("folderName", schedule.folderName)
+                .put("currentWeek", schedule.currentWeek)
+                .put("totalWeeks", schedule.totalWeeks)
+                .put("semesterStartDate", schedule.semesterStartDate?.toString())
+                .put("customStartDate", schedule.customStartDate)
+                .put(
+                    "courses",
+                    JSONArray().apply {
+                        schedule.courses.forEach { course ->
+                            put(
+                                JSONObject()
+                                    .put("id", course.id)
+                                    .put("scheduledDate", course.scheduledDate?.toString())
+                                    .put("name", course.name)
+                                    .put("dayOfWeek", course.dayOfWeek.name)
+                                    .put("startTime", course.startTime.toString())
+                                    .put("endTime", course.endTime.toString())
+                                    .put("location", course.location)
+                                    .put("teacher", course.teacher)
+                                    .put("weekStart", course.weeks.first)
+                                    .put("weekEnd", course.weeks.last)
+                                    .put("colorSeed", course.colorSeed.name),
+                            )
+                        }
+                    },
+                )
+                .toString(2)
+        }
+
+        fun decodeSchedule(rawJson: String): SemesterSchedule {
+            val json = JSONObject(rawJson)
+            val courses = json.getJSONArray("courses")
+            return SemesterSchedule(
+                id = json.getString("id"),
+                displayName = json.getString("displayName"),
+                folderName = json.getString("folderName"),
+                currentWeek = json.getInt("currentWeek"),
+                totalWeeks = json.getInt("totalWeeks"),
+                customStartDate = json.optBoolean("customStartDate", false),
+                semesterStartDate = json.optString("semesterStartDate")
+                    .takeIf { it.isNotBlank() && it != "null" }
+                    ?.let(LocalDate::parse),
+                courses = List(courses.length()) { index ->
+                    val course = courses.getJSONObject(index)
+                    Course(
+                        id = course.getString("id"),
+                        scheduledDate = course.optString("scheduledDate").takeIf { it.isNotBlank() && it != "null" }?.let(LocalDate::parse),
+                        name = course.getString("name"),
+                        dayOfWeek = DayOfWeek.valueOf(course.getString("dayOfWeek")),
+                        startTime = LocalTime.parse(course.getString("startTime")),
+                        endTime = LocalTime.parse(course.getString("endTime")),
+                        location = course.getString("location"),
+                        teacher = course.getString("teacher"),
+                        weeks = course.getInt("weekStart")..course.getInt("weekEnd"),
+                        colorSeed = CourseColorSeed.valueOf(course.getString("colorSeed")),
+                    )
                 },
             )
-            .toString(2)
-    }
-
-    private fun decodeSchedule(rawJson: String): SemesterSchedule {
-        val json = JSONObject(rawJson)
-        val courses = json.getJSONArray("courses")
-        return SemesterSchedule(
-            id = json.getString("id"),
-            displayName = json.getString("displayName"),
-            folderName = json.getString("folderName"),
-            currentWeek = json.getInt("currentWeek"),
-            totalWeeks = json.getInt("totalWeeks"),
-            semesterStartDate = json.optString("semesterStartDate")
-                .takeIf { it.isNotBlank() && it != "null" }
-                ?.let(LocalDate::parse),
-            courses = List(courses.length()) { index ->
-                val course = courses.getJSONObject(index)
-                Course(
-                    id = course.getString("id"),
-                    name = course.getString("name"),
-                    dayOfWeek = DayOfWeek.valueOf(course.getString("dayOfWeek")),
-                    startTime = LocalTime.parse(course.getString("startTime")),
-                    endTime = LocalTime.parse(course.getString("endTime")),
-                    location = course.getString("location"),
-                    teacher = course.getString("teacher"),
-                    weeks = course.getInt("weekStart")..course.getInt("weekEnd"),
-                    colorSeed = CourseColorSeed.valueOf(course.getString("colorSeed")),
-                )
-            },
-        )
+        }
     }
 }
